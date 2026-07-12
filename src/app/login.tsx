@@ -69,7 +69,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <Screen>
+    <Screen safeTop>
       <View style={styles.hero}>
         <LinearGradient
           colors={['rgba(61,231,255,0.22)', 'rgba(46,230,166,0.06)', 'transparent']}

@@ -21,6 +21,11 @@ type Props = {
   padded?: boolean;
   /** Extra bottom padding beyond tab bar (modals / stack screens can set false). */
   tabAware?: boolean;
+  /**
+   * Apply top safe-area inset. Off by default — tab/stack headers already clear the status bar.
+   * Enable on full-bleed screens without a navigator header (e.g. login).
+   */
+  safeTop?: boolean;
 };
 
 export function Screen({
@@ -31,6 +36,7 @@ export function Screen({
   style,
   padded = true,
   tabAware = true,
+  safeTop = false,
 }: Props) {
   const { contentPadding } = useTabBarHeight();
   const content = <View style={[padded && styles.pad, style]}>{children}</View>;
@@ -46,7 +52,7 @@ export function Screen({
       />
       <View style={styles.orbA} />
       <View style={styles.orbB} />
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={safeTop ? ['top'] : []}>
         {scroll ? (
           <ScrollView
             contentContainerStyle={{
@@ -77,7 +83,7 @@ export function Screen({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Palette.void },
   safe: { flex: 1 },
-  pad: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm },
+  pad: { paddingHorizontal: Spacing.md, paddingTop: Spacing.xs },
   orbA: {
     position: 'absolute',
     width: 220,

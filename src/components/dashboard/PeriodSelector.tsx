@@ -1,10 +1,10 @@
 import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
 import { addWeeks, format, isSameDay, startOfWeek } from 'date-fns';
-import { GlassPanel } from '@/components/ui/Primitives';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore, useWeekRange } from '@/stores/finance-store';
 import { getWeekRange } from '@/lib/dates';
 
+/** Compact period chips — sits flush under the tab header. */
 export function PeriodSelector() {
   const weekAnchor = useFinanceStore((s) => s.weekAnchor);
   const setWeekAnchor = useFinanceStore((s) => s.setWeekAnchor);
@@ -26,7 +26,6 @@ export function PeriodSelector() {
     })),
   ];
 
-  // Deduplicate Current/Previous from recent list by date
   const seen = new Set<string>();
   const uniqueChips = chips.filter((c) => {
     const k = format(c.date, 'yyyy-MM-dd');
@@ -40,14 +39,17 @@ export function PeriodSelector() {
   });
 
   return (
-    <GlassPanel style={styles.wrap}>
+    <View style={styles.wrap}>
       <View style={styles.head}>
         <Text style={styles.title}>Period · {format(start, 'd MMM')}</Text>
-        <Text style={styles.range}>
-          {format(start, 'yyyy-MM-dd')} → {format(end, 'yyyy-MM-dd')}
+        <Text style={styles.range} numberOfLines={1}>
+          {format(start, 'MM/dd')}–{format(end, 'MM/dd')}
         </Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chips}>
         {uniqueChips.map((c) => {
           const on = isSameDay(c.date, selectedStart);
           return (
@@ -60,30 +62,30 @@ export function PeriodSelector() {
           );
         })}
       </ScrollView>
-    </GlassPanel>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: Spacing.sm, gap: 10, paddingVertical: 12 },
+  wrap: { marginBottom: Spacing.sm, gap: 6 },
   head: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: 8,
   },
-  title: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '800', fontSize: 15 },
-  range: { color: Palette.textDim, fontSize: 11, flexShrink: 1, textAlign: 'right' },
-  chips: { flexDirection: 'row', gap: 8, paddingRight: 8 },
+  title: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '800', fontSize: 14 },
+  range: { color: Palette.textDim, fontSize: 11, flexShrink: 1 },
+  chips: { flexDirection: 'row', gap: 6, paddingRight: 4 },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: Radii.pill,
     backgroundColor: Palette.panelElevated,
     borderWidth: 1,
     borderColor: Palette.stroke,
   },
-  chipOn: { backgroundColor: Palette.teal, borderColor: Palette.teal },
+  chipOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
   chipText: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
   chipTextOn: { color: Palette.void },
 });

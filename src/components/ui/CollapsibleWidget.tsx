@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   bar: { width: 4 },
-  body: { flex: 1, padding: Spacing.md },
+  body: { flex: 1, paddingHorizontal: Spacing.md, paddingVertical: 12 },
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -110,6 +110,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  summary: { marginTop: Spacing.sm },
-  content: { marginTop: Spacing.sm, gap: 8 },
+  summary: { marginTop: 6 },
+  content: { marginTop: Spacing.xs, gap: 8 },
 });

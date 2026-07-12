@@ -12,7 +12,7 @@ export function AppBalanceCard({ stats }: { stats: PeriodStats }) {
   return (
     <CollapsibleWidget
       accent={Palette.cyan}
-      defaultExpanded
+      defaultExpanded={false}
       header={<WidgetTitle icon="wallet-outline" title="App Balance" iconColor={Palette.cyan} />}
       collapsedSummary={
         <View style={styles.summaryRow}>
