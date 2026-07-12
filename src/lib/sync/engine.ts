@@ -553,6 +553,13 @@ export async function pushFullSnapshot(): Promise<boolean> {
   return true;
 }
 
+/** Debounce rapid saves (e.g. receipt line items) into one Sheets write. */
+const PUSH_DEBOUNCE_MS = 1_200;
+let pushDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Queue a local change and schedule an automatic push to Google Sheets.
+ */
 export async function queueMutation(entity: string, payload: unknown): Promise<void> {
   await enqueueOutbox({
     id: createId(),
@@ -562,6 +569,37 @@ export async function queueMutation(entity: string, payload: unknown): Promise<v
     created_at: nowIso(),
     attempts: 0,
   });
+  scheduleSheetPush();
+}
+
+/** After any edit, push to Sheets soon (coalesced). */
+export function scheduleSheetPush(): void {
+  if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
+  pushDebounceTimer = setTimeout(() => {
+    pushDebounceTimer = null;
+    void pushPendingChanges();
+  }, PUSH_DEBOUNCE_MS);
+}
+
+async function pushPendingChanges(): Promise<void> {
+  const access = await getAccess();
+  if (!access) return;
+
+  if (syncInFlight) {
+    try {
+      await syncInFlight;
+    } catch {
+      // previous sync failed — still try below
+    }
+  }
+
+  const pending = await listOutbox();
+  if (!pending.length) return;
+
+  await syncNow({ force: true, push: true, pull: false });
+
+  const stillPending = await listOutbox();
+  if (stillPending.length) scheduleSheetPush();
 }
 
 export async function flushOutbox(): Promise<void> {

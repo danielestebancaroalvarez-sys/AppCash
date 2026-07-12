@@ -24,6 +24,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { createId } from '@/lib/id';
 import { nowIso } from '@/lib/dates';
 import { deleteCategory, upsertCategory } from '@/lib/db';
+import { queueMutation } from '@/lib/sync/engine';
 import type { Category, CategoryType } from '@/types/models';
 
 export default function CategoriesScreen() {
@@ -74,6 +75,7 @@ export default function CategoriesScreen() {
         updated_at: nowIso(),
       };
       await upsertCategory(cat);
+      await queueMutation('categories', cat);
       setFormOpen(false);
       await refresh();
     } catch (e) {
@@ -89,6 +91,7 @@ export default function CategoriesScreen() {
       `“${cat.name}” will be removed. Existing transactions keep their amounts but lose this label.`,
       async () => {
         await deleteCategory(cat.id);
+        await queueMutation('categories', { id: cat.id, deleted: true });
         await refresh();
       },
       { confirmLabel: 'Delete', tone: 'danger' }
