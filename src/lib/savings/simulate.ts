@@ -60,7 +60,7 @@ export function formatDuration(months: number): string {
 }
 
 function pointLabel(months: number): string {
-  if (months <= 0) return 'Hoy';
+  if (months <= 0) return 'Now';
   if (months < 12) return `${months}m`;
   const y = Math.floor(months / 12);
   const rem = months % 12;
@@ -72,7 +72,7 @@ function buildCurvePoints(
   target: number,
   maxPoints = 10
 ): ProjectionPoint[] {
-  if (!balances.length) return [{ label: 'Hoy', value: 0, monthIndex: 0 }];
+  if (!balances.length) return [{ label: 'Now', value: 0, monthIndex: 0 }];
 
   const lastIdx = balances.length - 1;
   const indices = new Set<number>([0, lastIdx]);
@@ -120,7 +120,7 @@ export function projectSavings(opts: {
       arriveDate: format(from, 'yyyy-MM-dd'),
       arriveLabel: format(from, 'dd MMM yyyy'),
       points: [
-        { label: 'Hoy', value: opts.current, monthIndex: 0 },
+        { label: 'Now', value: opts.current, monthIndex: 0 },
         { label: 'Done', value: opts.target, monthIndex: 0 },
       ],
       monthlyEquivalent: monthly,
@@ -135,7 +135,7 @@ export function projectSavings(opts: {
       weeks: Infinity,
       arriveDate: '',
       arriveLabel: 'Need a contribution',
-      points: [{ label: 'Hoy', value: opts.current, monthIndex: 0 }],
+      points: [{ label: 'Now', value: opts.current, monthIndex: 0 }],
       monthlyEquivalent: 0,
       remaining,
       reached: false,

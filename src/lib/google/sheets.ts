@@ -16,75 +16,86 @@ import type {
  * System sheets (prefixed _sys_) store app internals — leave alone unless debugging.
  */
 export const HUMAN_SHEETS = [
-  'Usuarios',
-  'Categorias',
-  'Gastos_fijos',
-  'Compras',
-  'Ahorros',
+  'Users',
+  'Categories',
+  'Fixed',
+  'Purchases',
+  'Savings',
 ] as const;
 
 export const SYSTEM_SHEETS = [
-  '_sys_recibos',
-  '_sys_items_recibo',
-  '_sys_avisos',
-  '_sys_mercado',
+  '_sys_receipts',
+  '_sys_receipt_items',
+  '_sys_notifications',
+  '_sys_market',
   '_sys_config',
 ] as const;
 
 export const SHEET_NAMES = [...HUMAN_SHEETS, ...SYSTEM_SHEETS] as const;
+
+/** Old Spanish tab titles — still readable on pull. */
+export const LEGACY_SHEET_ALIASES: Record<SheetName, string[]> = {
+  Users: ['Usuarios'],
+  Categories: ['Categorias'],
+  Fixed: ['Gastos_fijos'],
+  Purchases: ['Compras'],
+  Savings: ['Ahorros'],
+  _sys_receipts: ['_sys_recibos'],
+  _sys_receipt_items: ['_sys_items_recibo'],
+  _sys_notifications: ['_sys_avisos'],
+  _sys_market: ['_sys_mercado'],
+  _sys_config: ['_sys_config'],
+};
 
 export type HumanSheetName = (typeof HUMAN_SHEETS)[number];
 export type SystemSheetName = (typeof SYSTEM_SHEETS)[number];
 export type SheetName = (typeof SHEET_NAMES)[number];
 
 export const SHEET_HEADERS: Record<SheetName, string[]> = {
-  // ——— Editable ———
-  Usuarios: ['id', 'nombre', 'email', 'rol', 'foto'],
-  Categorias: ['id', 'nombre', 'tipo', 'icono', 'color'],
-  Gastos_fijos: [
+  Users: ['id', 'name', 'email', 'role', 'photo'],
+  Categories: ['id', 'name', 'type', 'icon', 'color'],
+  Fixed: [
     'id',
-    'nombre',
-    'quien',
-    'categoria',
-    'monto',
-    'periodo',
-    'direccion',
-    'debito_auto',
-    'avisar_dias',
-    'activo',
-    'proximo_pago',
+    'name',
+    'who',
+    'category',
+    'amount',
+    'period',
+    'direction',
+    'auto_debit',
+    'notify_days',
+    'active',
+    'next_due',
   ],
-  Compras: [
+  Purchases: [
     'id',
-    'fecha',
-    'hora',
-    'quien',
-    'categoria',
-    'tipo',
-    'unidades',
-    'precio_unidad',
-    'precio_total',
+    'date',
+    'time',
+    'who',
+    'category',
+    'item',
+    'qty',
+    'unit_price',
+    'line_total',
   ],
-  Ahorros: [
+  Savings: [
     'id',
-    'nombre',
-    'meta',
-    'actual',
-    'fecha_limite',
-    'quien',
-    'categoria',
+    'name',
+    'target',
+    'current',
+    'deadline',
+    'who',
+    'kind',
     'color',
     'plan',
-    'aporte',
-    'frecuencia',
-    'rentabilidad',
-    'tasa',
-    'recordatorio',
-    'actualizado',
+    'contribution',
+    'frequency',
+    'yield_mode',
+    'annual_rate',
+    'reminder',
+    'updated_at',
   ],
-
-  // ——— System (do not edit by hand) ———
-  _sys_recibos: [
+  _sys_receipts: [
     'id',
     'user_id',
     'store',
@@ -94,7 +105,7 @@ export const SHEET_HEADERS: Record<SheetName, string[]> = {
     'raw_gemini_json',
     'updated_at',
   ],
-  _sys_items_recibo: [
+  _sys_receipt_items: [
     'id',
     'receipt_id',
     'name',
@@ -104,7 +115,7 @@ export const SHEET_HEADERS: Record<SheetName, string[]> = {
     'category_guess',
     'updated_at',
   ],
-  _sys_avisos: [
+  _sys_notifications: [
     'id',
     'user_id',
     'title',
@@ -114,7 +125,7 @@ export const SHEET_HEADERS: Record<SheetName, string[]> = {
     'status',
     'updated_at',
   ],
-  _sys_mercado: [
+  _sys_market: [
     'id',
     'product_name_normalized',
     'avg_price',
@@ -123,66 +134,75 @@ export const SHEET_HEADERS: Record<SheetName, string[]> = {
     'purchase_count',
     'updated_at',
   ],
-  _sys_config: ['clave', 'valor'],
+  _sys_config: ['key', 'value'],
 };
 
-export type CompraRow = {
+export type PurchaseRow = {
   id: string;
-  fecha: string;
-  hora: string;
-  quien: string;
-  categoria: string;
-  tipo: string;
-  unidades: number;
-  precio_unidad: number;
-  precio_total: number;
+  date: string;
+  time: string;
+  who: string;
+  category: string;
+  item: string;
+  qty: number;
+  unit_price: number;
+  line_total: number;
 };
 
-export type AhorroRow = {
+export type SavingsRow = {
   id: string;
-  nombre: string;
-  meta: number;
-  actual: number;
-  fecha_limite: string;
-  quien: string;
-  actualizado: string;
-  categoria: string;
+  name: string;
+  target: number;
+  current: number;
+  deadline: string;
+  who: string;
+  updated_at: string;
+  kind: string;
   color: string;
   plan: string;
-  aporte: number;
-  frecuencia: string;
-  rentabilidad: string;
-  tasa: number;
-  recordatorio: boolean;
+  contribution: number;
+  frequency: string;
+  yield_mode: string;
+  annual_rate: number;
+  reminder: boolean;
 };
 
-export type UsuarioRow = {
+export type UserRow = {
   id: string;
-  nombre: string;
+  name: string;
   email: string;
-  rol: string;
-  foto: string;
+  role: string;
+  photo: string;
 };
-export type CategoriaRow = {
+
+export type CategoryRow = {
   id: string;
-  nombre: string;
-  tipo: string;
-  icono: string;
+  name: string;
+  type: string;
+  icon: string;
   color: string;
 };
-export type GastoFijoRow = {
+
+export type FixedRow = {
   id: string;
-  nombre: string;
-  quien: string;
-  categoria: string;
-  monto: number;
-  periodo: string;
-  direccion: string;
-  debito_auto: boolean;
-  avisar_dias: number;
-  activo: boolean;
-  proximo_pago: string;
+  name: string;
+  who: string;
+  category: string;
+  amount: number;
+  period: string;
+  direction: string;
+  auto_debit: boolean;
+  notify_days: number;
+  active: boolean;
+  next_due: string;
 };
+
+/** @deprecated aliases kept for call sites mid-migration */
+export type CompraRow = PurchaseRow;
+export type AhorroRow = SavingsRow;
+export type UsuarioRow = UserRow;
+export type CategoriaRow = CategoryRow;
+export type GastoFijoRow = FixedRow;
 
 /** Accept full Sheets URL or bare spreadsheet ID. */
 export function parseSpreadsheetId(input: string): string | null {
@@ -253,7 +273,7 @@ export async function ensureWorkbookStructure(
 }
 
 export async function ensureHeaders(accessToken: string, spreadsheetId: string): Promise<void> {
-  const existing = await batchReadSheets(accessToken, spreadsheetId);
+  const existing = await batchReadSheets(accessToken, spreadsheetId, [...SHEET_NAMES], false);
   const data = [];
   for (const name of SHEET_NAMES) {
     const values = existing[name] ?? [];
@@ -268,22 +288,54 @@ export async function ensureHeaders(accessToken: string, spreadsheetId: string):
   });
 }
 
+/**
+ * Read English tabs. When `includeLegacy` is true, fall back to Spanish tab names
+ * if the English tab is empty (migration path).
+ */
 export async function batchReadSheets(
   accessToken: string,
   spreadsheetId: string,
-  sheets: SheetName[] = [...SHEET_NAMES]
+  sheets: SheetName[] = [...SHEET_NAMES],
+  includeLegacy = true
 ): Promise<Record<SheetName, string[][]>> {
-  const ranges = sheets.map((s) => `${s}!A:Z`);
+  const ranges: string[] = [];
+  const rangeMeta: Array<{ sheet: SheetName; legacy: boolean }> = [];
+  for (const s of sheets) {
+    ranges.push(`${s}!A:Z`);
+    rangeMeta.push({ sheet: s, legacy: false });
+    if (includeLegacy) {
+      for (const legacy of LEGACY_SHEET_ALIASES[s] ?? []) {
+        if (legacy === s) continue;
+        ranges.push(`${legacy}!A:Z`);
+        rangeMeta.push({ sheet: s, legacy: true });
+      }
+    }
+  }
+
   const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join('&');
-  const data = await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchGet?${qs}`);
+  let data: { valueRanges?: Array<{ range?: string; values?: string[][] }> };
+  try {
+    data = await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchGet?${qs}`);
+  } catch {
+    // Some legacy titles may 400 the whole batch — retry English-only
+    if (!includeLegacy) throw new Error('Sheets batch read failed');
+    return batchReadSheets(accessToken, spreadsheetId, sheets, false);
+  }
+
+  const valueRanges = data.valueRanges ?? [];
   const out = {} as Record<SheetName, string[][]>;
-  const valueRanges = (data.valueRanges as Array<{ range?: string; values?: string[][] }>) ?? [];
-  sheets.forEach((sheet, i) => {
-    const match = valueRanges.find(
-      (vr) => (vr.range ?? '').includes(sheet) || (vr.range ?? '').startsWith(sheet)
-    );
-    out[sheet] = match?.values ?? valueRanges[i]?.values ?? [];
+  for (const s of sheets) out[s] = [];
+
+  rangeMeta.forEach((meta, i) => {
+    const values = valueRanges[i]?.values ?? [];
+    const hasData = values.length > 1 || (values.length === 1 && values[0]?.some((c) => String(c).trim()));
+    if (!meta.legacy) {
+      out[meta.sheet] = values;
+    } else if ((!out[meta.sheet] || out[meta.sheet].length <= 1) && hasData && values.length > 1) {
+      out[meta.sheet] = values;
+    }
   });
+
   return out;
 }
 
@@ -336,20 +388,20 @@ function asBool(v: string): boolean {
 }
 
 function yesNo(v: boolean): string {
-  return v ? 'si' : 'no';
+  return v ? 'yes' : 'no';
 }
 
 export function periodLabel(p: Period): string {
   switch (p) {
     case 'weekly':
-      return 'semanal';
+      return 'weekly';
     case 'fortnightly':
-      return 'quincenal';
+      return 'fortnightly';
     case 'yearly':
-      return 'anual';
+      return 'yearly';
     case 'monthly':
     default:
-      return 'mensual';
+      return 'monthly';
   }
 }
 
@@ -362,7 +414,7 @@ export function parsePeriod(v: string): Period {
 }
 
 export function directionLabel(d: FixedItem['direction']): string {
-  return d === 'in' ? 'ingreso' : 'gasto';
+  return d === 'in' ? 'income' : 'expense';
 }
 
 export function parseDirection(v: string): FixedItem['direction'] {
@@ -379,73 +431,73 @@ function dataRows(values: string[][]): Array<Record<string, string>> {
     .map((row) => rowToObject(header, row));
 }
 
-export function parseUsuarioRows(values: string[][]): UsuarioRow[] {
+export function parseUsuarioRows(values: string[][]): UserRow[] {
   return dataRows(values).map((o) => ({
     id: o.id || '',
-    nombre: o.nombre || o.name || '',
+    name: o.name || o.nombre || '',
     email: o.email || '',
-    rol: o.rol || o.role || 'member',
-    foto: o.foto || o.avatar_url || o.photo || '',
+    role: o.role || o.rol || 'member',
+    photo: o.photo || o.foto || o.avatar_url || '',
   }));
 }
 
-export function parseCategoriaRows(values: string[][]): CategoriaRow[] {
+export function parseCategoriaRows(values: string[][]): CategoryRow[] {
   return dataRows(values).map((o) => ({
     id: o.id || '',
-    nombre: o.nombre || o.name || '',
-    tipo: o.tipo || o.type || 'expense',
-    icono: o.icono || o.icon || 'tag',
+    name: o.name || o.nombre || '',
+    type: o.type || o.tipo || 'expense',
+    icon: o.icon || o.icono || 'tag',
     color: o.color || '#8B7CFF',
   }));
 }
 
-export function parseGastoFijoRows(values: string[][]): GastoFijoRow[] {
+export function parseGastoFijoRows(values: string[][]): FixedRow[] {
   return dataRows(values).map((o) => ({
     id: o.id || '',
-    nombre: o.nombre || o.name || '',
-    quien: o.quien || '',
-    categoria: o.categoria || '',
-    monto: asNum(o.monto) || asNum(o.amount_aud),
-    periodo: o.periodo || o.period || 'mensual',
-    direccion: o.direccion || o.direction || 'gasto',
-    debito_auto: asBool(o.debito_auto || o.auto_debit || 'si'),
-    avisar_dias: asNum(o.avisar_dias) || asNum(o.notify_days_before),
-    activo: o.activo != null && o.activo !== '' ? asBool(o.activo) : true,
-    proximo_pago: o.proximo_pago || o.next_due || '',
+    name: o.name || o.nombre || '',
+    who: o.who || o.quien || '',
+    category: o.category || o.categoria || '',
+    amount: asNum(o.amount) || asNum(o.monto) || asNum(o.amount_aud),
+    period: o.period || o.periodo || 'monthly',
+    direction: o.direction || o.direccion || 'expense',
+    auto_debit: asBool(o.auto_debit || o.debito_auto || 'yes'),
+    notify_days: asNum(o.notify_days) || asNum(o.avisar_dias) || asNum(o.notify_days_before),
+    active: o.active != null && o.active !== '' ? asBool(o.active) : o.activo != null && o.activo !== '' ? asBool(o.activo) : true,
+    next_due: o.next_due || o.proximo_pago || '',
   }));
 }
 
-export function parseCompraRows(values: string[][]): CompraRow[] {
+export function parseCompraRows(values: string[][]): PurchaseRow[] {
   return dataRows(values).map((o) => ({
     id: o.id || '',
-    fecha: o.fecha || '',
-    hora: o.hora || '00:00',
-    quien: o.quien || '',
-    categoria: o.categoria || '',
-    tipo: o.tipo || '',
-    unidades: asNum(o.unidades) || 1,
-    precio_unidad: asNum(o.precio_unidad),
-    precio_total: asNum(o.precio_total) || asNum(o.precio_unidad),
+    date: o.date || o.fecha || '',
+    time: o.time || o.hora || '00:00',
+    who: o.who || o.quien || '',
+    category: o.category || o.categoria || '',
+    item: o.item || o.tipo || o.name || '',
+    qty: asNum(o.qty) || asNum(o.unidades) || 1,
+    unit_price: asNum(o.unit_price) || asNum(o.precio_unidad),
+    line_total: asNum(o.line_total) || asNum(o.precio_total) || asNum(o.unit_price) || asNum(o.precio_unidad),
   }));
 }
 
-export function parseAhorroRows(values: string[][]): AhorroRow[] {
+export function parseAhorroRows(values: string[][]): SavingsRow[] {
   return dataRows(values).map((o) => ({
     id: o.id || '',
-    nombre: o.nombre || '',
-    meta: asNum(o.meta) || asNum(o.meta_aud) || asNum(o.target_aud),
-    actual: asNum(o.actual) || asNum(o.actual_aud) || asNum(o.current_aud),
-    fecha_limite: o.fecha_limite || o.deadline || '',
-    quien: o.quien || '',
-    actualizado: o.actualizado || o.updated_at || '',
-    categoria: o.categoria || o.kind || 'other',
+    name: o.name || o.nombre || '',
+    target: asNum(o.target) || asNum(o.meta) || asNum(o.target_aud),
+    current: asNum(o.current) || asNum(o.actual) || asNum(o.current_aud),
+    deadline: o.deadline || o.fecha_limite || '',
+    who: o.who || o.quien || '',
+    updated_at: o.updated_at || o.actualizado || '',
+    kind: o.kind || o.categoria || o.category || 'other',
     color: o.color || '#3DE7FF',
     plan: o.plan || o.plan_mode || 'contribution',
-    aporte: asNum(o.aporte) || asNum(o.contribution_aud),
-    frecuencia: o.frecuencia || o.contribution_frequency || 'monthly',
-    rentabilidad: o.rentabilidad || o.yield_mode || 'none',
-    tasa: asNum(o.tasa) || asNum(o.annual_rate),
-    recordatorio: asBool(o.recordatorio || o.reminder || 'no'),
+    contribution: asNum(o.contribution) || asNum(o.aporte) || asNum(o.contribution_aud),
+    frequency: o.frequency || o.frecuencia || o.contribution_frequency || 'monthly',
+    yield_mode: o.yield_mode || o.rentabilidad || 'none',
+    annual_rate: asNum(o.annual_rate) || asNum(o.tasa),
+    reminder: asBool(o.reminder || o.recordatorio || 'no'),
   }));
 }
 
@@ -464,15 +516,15 @@ export function serializeRows(sheet: SheetName, rows: Array<Record<string, unkno
 export function transactionTypeLabel(type: Transaction['type']): string {
   switch (type) {
     case 'income_sporadic':
-      return 'ingreso';
+      return 'income';
     case 'expense_sporadic':
-      return 'gasto';
+      return 'expense';
     case 'variable':
       return 'variable';
     case 'fixed':
-      return 'fijo';
+      return 'fixed';
     case 'savings_contrib':
-      return 'ahorro';
+      return 'savings';
     default:
       return type;
   }
@@ -497,11 +549,11 @@ export function asCategoryType(v: string): Category['type'] {
 export function categoryTypeLabel(t: Category['type']): string {
   switch (t) {
     case 'income':
-      return 'ingreso';
+      return 'income';
     case 'savings':
-      return 'ahorro';
+      return 'savings';
     default:
-      return 'gasto';
+      return 'expense';
   }
 }
 

@@ -179,32 +179,32 @@ async function buildSnapshots(): Promise<Array<{ sheet: SheetName; rows: string[
 
   const usuarios = users.map((u) => ({
     id: u.id,
-    nombre: u.name,
+    name: u.name,
     email: u.email,
-    rol: u.role,
-    foto: u.avatar_url,
+    role: u.role,
+    photo: u.avatar_url,
   }));
 
   const categorias = categories.map((c) => ({
     id: c.id,
-    nombre: c.name,
-    tipo: categoryTypeLabel(c.type),
-    icono: c.icon,
+    name: c.name,
+    type: categoryTypeLabel(c.type),
+    icon: c.icon,
     color: c.color,
   }));
 
   const gastos = fixed.map((f) => ({
     id: f.id,
-    nombre: f.name,
-    quien: userName(f.user_id),
-    categoria: catName(f.category_id),
-    monto: f.amount_aud,
-    periodo: periodLabel(f.period),
-    direccion: directionLabel(f.direction),
-    debito_auto: f.auto_debit,
-    avisar_dias: f.notify_days_before,
-    activo: f.active,
-    proximo_pago: f.next_due,
+    name: f.name,
+    who: userName(f.user_id),
+    category: catName(f.category_id),
+    amount: f.amount_aud,
+    period: periodLabel(f.period),
+    direction: directionLabel(f.direction),
+    auto_debit: f.auto_debit,
+    notify_days: f.notify_days_before,
+    active: f.active,
+    next_due: f.next_due,
   }));
 
   const receiptById = new Map(receipts.map((r) => [r.id, r]));
@@ -217,54 +217,54 @@ async function buildSnapshots(): Promise<Array<{ sheet: SheetName; rows: string[
     const receipt = receiptById.get(item.receipt_id);
     if (!receipt) continue;
     const purchased = receipt.purchased_at || nowIso();
-    const fecha = purchased.slice(0, 10);
-    const hora = purchased.includes('T') ? purchased.slice(11, 16) : '12:00';
+    const date = purchased.slice(0, 10);
+    const time = purchased.includes('T') ? purchased.slice(11, 16) : '12:00';
     const parentTx = transactions.find((t) => t.receipt_id === receipt.id);
     compras.push({
       id: item.id,
-      fecha,
-      hora,
-      quien: userName(receipt.user_id),
-      categoria: item.category_guess || (parentTx ? catName(parentTx.category_id) : ''),
-      tipo: item.name,
-      unidades: item.qty,
-      precio_unidad: item.unit_price_aud,
-      precio_total: item.line_total_aud,
+      date,
+      time,
+      who: userName(receipt.user_id),
+      category: item.category_guess || (parentTx ? catName(parentTx.category_id) : ''),
+      item: item.name,
+      qty: item.qty,
+      unit_price: item.unit_price_aud,
+      line_total: item.line_total_aud,
     });
   }
   for (const tx of transactions) {
     if (tx.receipt_id && txWithReceipt.has(tx.receipt_id)) continue;
     const created = tx.created_at || `${tx.date}T12:00:00`;
-    const hora = created.includes('T') ? created.slice(11, 16) : '12:00';
+    const time = created.includes('T') ? created.slice(11, 16) : '12:00';
     compras.push({
       id: tx.id,
-      fecha: tx.date,
-      hora,
-      quien: userName(tx.user_id),
-      categoria: catName(tx.category_id),
-      tipo: tx.merchant || tx.note || transactionTypeLabel(tx.type),
-      unidades: 1,
-      precio_unidad: tx.amount_aud,
-      precio_total: tx.amount_aud,
+      date: tx.date,
+      time,
+      who: userName(tx.user_id),
+      category: catName(tx.category_id),
+      item: tx.merchant || tx.note || transactionTypeLabel(tx.type),
+      qty: 1,
+      unit_price: tx.amount_aud,
+      line_total: tx.amount_aud,
     });
   }
 
   const ahorros = goals.map((g) => ({
     id: g.id,
-    nombre: g.name,
-    meta: g.target_aud,
-    actual: g.current_aud,
-    fecha_limite: g.deadline,
-    quien: userName(g.user_id),
-    categoria: g.kind,
+    name: g.name,
+    target: g.target_aud,
+    current: g.current_aud,
+    deadline: g.deadline,
+    who: userName(g.user_id),
+    kind: g.kind,
     color: g.color,
     plan: g.plan_mode,
-    aporte: g.contribution_aud,
-    frecuencia: g.contribution_frequency,
-    rentabilidad: g.yield_mode,
-    tasa: g.annual_rate,
-    recordatorio: g.reminder,
-    actualizado: g.updated_at,
+    contribution: g.contribution_aud,
+    frequency: g.contribution_frequency,
+    yield_mode: g.yield_mode,
+    annual_rate: g.annual_rate,
+    reminder: g.reminder,
+    updated_at: g.updated_at,
   }));
 
   const sysRecibos = receipts.map((r) => ({ ...r }));
@@ -273,22 +273,22 @@ async function buildSnapshots(): Promise<Array<{ sheet: SheetName; rows: string[
   const sysMercado = products.map((p) => ({ ...p }));
 
   const configKeys = ['currency', 'week_starts', 'sync_interval_sec', 'active_user_id', 'gemini_model'];
-  const sysConfig: Array<{ clave: string; valor: string }> = [];
+  const sysConfig: Array<{ key: string; value: string }> = [];
   for (const key of configKeys) {
     const value = await getSetting(key);
-    if (value != null) sysConfig.push({ clave: key, valor: value });
+    if (value != null) sysConfig.push({ key, value });
   }
 
   return [
-    { sheet: 'Usuarios', rows: serializeRows('Usuarios', usuarios) },
-    { sheet: 'Categorias', rows: serializeRows('Categorias', categorias) },
-    { sheet: 'Gastos_fijos', rows: serializeRows('Gastos_fijos', gastos) },
-    { sheet: 'Compras', rows: serializeRows('Compras', compras) },
-    { sheet: 'Ahorros', rows: serializeRows('Ahorros', ahorros) },
-    { sheet: '_sys_recibos', rows: serializeRows('_sys_recibos', sysRecibos) },
-    { sheet: '_sys_items_recibo', rows: serializeRows('_sys_items_recibo', sysItems) },
-    { sheet: '_sys_avisos', rows: serializeRows('_sys_avisos', sysAvisos) },
-    { sheet: '_sys_mercado', rows: serializeRows('_sys_mercado', sysMercado) },
+    { sheet: 'Users', rows: serializeRows('Users', usuarios) },
+    { sheet: 'Categories', rows: serializeRows('Categories', categorias) },
+    { sheet: 'Fixed', rows: serializeRows('Fixed', gastos) },
+    { sheet: 'Purchases', rows: serializeRows('Purchases', compras) },
+    { sheet: 'Savings', rows: serializeRows('Savings', ahorros) },
+    { sheet: '_sys_receipts', rows: serializeRows('_sys_receipts', sysRecibos) },
+    { sheet: '_sys_receipt_items', rows: serializeRows('_sys_receipt_items', sysItems) },
+    { sheet: '_sys_notifications', rows: serializeRows('_sys_notifications', sysAvisos) },
+    { sheet: '_sys_market', rows: serializeRows('_sys_market', sysMercado) },
     { sheet: '_sys_config', rows: serializeRows('_sys_config', sysConfig) },
   ];
 }
@@ -358,28 +358,28 @@ export async function pullFromSheets(): Promise<boolean> {
 
   const all = await batchReadSheets(access.token, access.spreadsheetId);
 
-  // 1) Usuarios
-  const usuarioRows = parseUsuarioRows(all.Usuarios ?? []);
+  // 1) Users
+  const usuarioRows = parseUsuarioRows(all.Users ?? []);
   if (usuarioRows.length > 0) {
     const users: AppUser[] = usuarioRows.map((r) => ({
       id: r.id || createId(),
-      name: r.nombre || 'User',
+      name: r.name || 'User',
       email: r.email,
-      avatar_url: r.foto || '',
-      role: r.rol || 'member',
+      avatar_url: r.photo || '',
+      role: r.role || 'member',
       updated_at: nowIso(),
     }));
     await replaceSheetRows('users', users, upsertUser);
   }
 
-  // 2) Categorías
-  const catRows = parseCategoriaRows(all.Categorias ?? []);
+  // 2) Categories
+  const catRows = parseCategoriaRows(all.Categories ?? []);
   if (catRows.length > 0) {
     const cats: Category[] = catRows.map((r) => ({
       id: r.id || createId(),
-      name: r.nombre || 'Category',
-      type: asCategoryType(r.tipo),
-      icon: r.icono || 'tag',
+      name: r.name || 'Category',
+      type: asCategoryType(r.type),
+      icon: r.icon || 'tag',
       color: r.color || '#8B7CFF',
       is_system: false,
       updated_at: nowIso(),
@@ -390,23 +390,23 @@ export async function pullFromSheets(): Promise<boolean> {
   let users = await listUsers();
   let categories = await listCategories();
 
-  // 3) Gastos fijos
-  const fijoRows = parseGastoFijoRows(all.Gastos_fijos ?? []);
+  // 3) Fixed
+  const fijoRows = parseGastoFijoRows(all.Fixed ?? []);
   if (fijoRows.length > 0) {
     const items: FixedItem[] = [];
     for (const r of fijoRows) {
       items.push({
         id: r.id || createId(),
-        user_id: await resolveUserId(r.quien, users),
-        category_id: await resolveCategoryId(r.categoria, r.direccion, categories),
-        name: r.nombre || 'Fixed',
-        amount_aud: r.monto,
-        period: parsePeriod(r.periodo),
-        direction: parseDirection(r.direccion),
-        auto_debit: r.debito_auto,
-        notify_days_before: r.avisar_dias,
-        active: r.activo,
-        next_due: r.proximo_pago,
+        user_id: await resolveUserId(r.who, users),
+        category_id: await resolveCategoryId(r.category, r.direction, categories),
+        name: r.name || 'Fixed',
+        amount_aud: r.amount,
+        period: parsePeriod(r.period),
+        direction: parseDirection(r.direction),
+        auto_debit: r.auto_debit,
+        notify_days_before: r.notify_days,
+        active: r.active,
+        next_due: r.next_due,
         updated_at: nowIso(),
       });
     }
@@ -416,69 +416,69 @@ export async function pullFromSheets(): Promise<boolean> {
   users = await listUsers();
   categories = await listCategories();
 
-  // 4) Compras → transactions
-  const compras = parseCompraRows(all.Compras ?? []);
+  // 4) Purchases → transactions
+  const compras = parseCompraRows(all.Purchases ?? []);
   if (compras.length > 0) {
     const txs: Transaction[] = [];
     for (const row of compras) {
-      const date = row.fecha || nowIso().slice(0, 10);
-      const hora = (row.hora || '12:00').slice(0, 5);
+      const date = row.date || nowIso().slice(0, 10);
+      const time = (row.time || '12:00').slice(0, 5);
       txs.push({
         id: row.id || createId(),
-        user_id: await resolveUserId(row.quien, users),
-        type: labelToTxType(row.tipo),
-        category_id: await resolveCategoryId(row.categoria, row.tipo, categories),
-        amount_aud: row.precio_total || row.precio_unidad * (row.unidades || 1),
+        user_id: await resolveUserId(row.who, users),
+        type: labelToTxType(row.item),
+        category_id: await resolveCategoryId(row.category, row.item, categories),
+        amount_aud: row.line_total || row.unit_price * (row.qty || 1),
         date,
-        note: row.tipo,
-        merchant: row.tipo,
+        note: row.item,
+        merchant: row.item,
         receipt_id: '',
-        created_at: `${date}T${hora}:00`,
+        created_at: `${date}T${time}:00`,
         updated_at: nowIso(),
       });
     }
     await replaceSheetRows('transactions', txs, upsertTransaction);
   }
 
-  // 5) Ahorros
-  const ahorros = parseAhorroRows(all.Ahorros ?? []);
+  // 5) Savings
+  const ahorros = parseAhorroRows(all.Savings ?? []);
   if (ahorros.length > 0) {
     const goals: SavingsGoal[] = [];
     for (const row of ahorros) {
       const freq =
-        row.frecuencia === 'weekly' || row.frecuencia === 'semanal'
+        row.frequency === 'weekly' || row.frequency === 'semanal'
           ? 'weekly'
-          : row.frecuencia === 'fortnightly' || row.frecuencia === 'quincenal'
+          : row.frequency === 'fortnightly' || row.frequency === 'quincenal'
             ? 'fortnightly'
             : 'monthly';
       const plan = row.plan === 'deadline' || row.plan === 'fecha' ? 'deadline' : 'contribution';
       const yieldMode =
-        row.rentabilidad === 'yield' || row.rentabilidad === 'con' || row.rentabilidad === 'si'
+        row.yield_mode === 'yield' || row.yield_mode === 'con' || row.yield_mode === 'si'
           ? 'yield'
           : 'none';
       goals.push({
         id: row.id || createId(),
-        name: row.nombre || 'Goal',
-        target_aud: row.meta,
-        current_aud: row.actual,
-        deadline: row.fecha_limite,
-        user_id: await resolveUserId(row.quien, users),
-        updated_at: row.actualizado || nowIso(),
-        kind: (row.categoria as SavingsGoal['kind']) || 'other',
+        name: row.name || 'Goal',
+        target_aud: row.target,
+        current_aud: row.current,
+        deadline: row.deadline,
+        user_id: await resolveUserId(row.who, users),
+        updated_at: row.updated_at || nowIso(),
+        kind: (row.kind as SavingsGoal['kind']) || 'other',
         color: row.color || '#3DE7FF',
         plan_mode: plan,
-        contribution_aud: row.aporte,
+        contribution_aud: row.contribution,
         contribution_frequency: freq,
         yield_mode: yieldMode,
-        annual_rate: row.tasa,
-        reminder: row.recordatorio,
+        annual_rate: row.annual_rate,
+        reminder: row.reminder,
       });
     }
     await replaceSheetRows('savings_goals', goals, upsertSavingsGoal);
   }
 
   // 6) System sheets
-  const recibos = parseSysTable(all._sys_recibos ?? [], (o) => ({
+  const recibos = parseSysTable(all._sys_receipts ?? [], (o) => ({
     id: o.id,
     user_id: o.user_id,
     store: o.store,
@@ -490,7 +490,7 @@ export async function pullFromSheets(): Promise<boolean> {
   })) as Receipt[];
   if (recibos.length) await replaceSheetRows('receipts', recibos, upsertReceipt);
 
-  const items = parseSysTable(all._sys_items_recibo ?? [], (o) => ({
+  const items = parseSysTable(all._sys_receipt_items ?? [], (o) => ({
     id: o.id,
     receipt_id: o.receipt_id,
     name: o.name,
@@ -502,7 +502,7 @@ export async function pullFromSheets(): Promise<boolean> {
   })) as ReceiptItem[];
   if (items.length) await replaceSheetRows('receipt_items', items, upsertReceiptItem);
 
-  const avisos = parseSysTable(all._sys_avisos ?? [], (o) => ({
+  const avisos = parseSysTable(all._sys_notifications ?? [], (o) => ({
     id: o.id,
     user_id: o.user_id,
     title: o.title,
@@ -514,7 +514,7 @@ export async function pullFromSheets(): Promise<boolean> {
   })) as AppNotification[];
   if (avisos.length) await replaceSheetRows('notifications', avisos, upsertNotification);
 
-  const mercado = parseSysTable(all._sys_mercado ?? [], (o) => ({
+  const mercado = parseSysTable(all._sys_market ?? [], (o) => ({
     id: o.id,
     product_name_normalized: o.product_name_normalized,
     avg_price: Number(o.avg_price) || 0,
@@ -533,8 +533,8 @@ export async function pullFromSheets(): Promise<boolean> {
       header.forEach((h, i) => {
         o[h.trim().toLowerCase()] = row[i] ?? '';
       });
-      const key = o.clave || o.key;
-      const value = o.valor || o.value;
+      const key = o.key || o.clave;
+      const value = o.value || o.valor;
       if (key) await setSetting(key, value);
     }
   }

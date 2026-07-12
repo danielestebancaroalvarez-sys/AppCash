@@ -47,6 +47,13 @@ export default function MoreScreen() {
       <SectionTitle title="Money setup" />
       <GlassPanel style={styles.menu}>
         <MenuRow
+          icon="receipt-outline"
+          iconColor="#5B8CFF"
+          title="Receipts"
+          subtitle="Photos, dates, and line items"
+          onPress={() => router.push('/receipts' as never)}
+        />
+        <MenuRow
           icon="calendar-outline"
           iconColor={Palette.coral}
           title="Fixed income & bills"

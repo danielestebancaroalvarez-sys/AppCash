@@ -58,7 +58,7 @@ export default function AccountSheetsScreen() {
         await refresh();
         alert(
           'Sheet ready',
-          'Created editable tabs (Usuarios, Categorias, Gastos_fijos, Compras, Ahorros) plus _sys_ backups.'
+          'Created editable tabs (Users, Categories, Fixed, Purchases, Savings) plus _sys_ backups.'
         );
       }
     } catch (e) {
@@ -122,8 +122,9 @@ export default function AccountSheetsScreen() {
   return (
     <Screen tabAware={false}>
       <Text style={styles.lead}>
-        Human tabs: Usuarios, Categorias, Gastos_fijos, Compras, Ahorros. Tabs starting with _sys_
-        are app backups — leave them alone.
+        Human tabs: Users, Categories, Fixed, Purchases, Savings. Tabs starting with _sys_
+        are app backups — leave them alone. Sync once to create English tabs if you still see
+        old Spanish names.
       </Text>
 
       <GlassPanel style={{ gap: Spacing.sm }}>

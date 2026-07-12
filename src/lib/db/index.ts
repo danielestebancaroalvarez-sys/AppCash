@@ -423,6 +423,12 @@ export async function listReceiptItems(receiptId?: string): Promise<ReceiptItem[
   return db.getAllAsync<ReceiptItem>('SELECT * FROM receipt_items ORDER BY updated_at DESC');
 }
 
+export async function deleteReceipt(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM receipt_items WHERE receipt_id = ?', [id]);
+  await db.runAsync('DELETE FROM receipts WHERE id = ?', [id]);
+}
+
 export async function upsertSavingsGoal(g: SavingsGoal): Promise<void> {
   const db = await getDb();
   await db.runAsync(

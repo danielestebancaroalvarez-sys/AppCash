@@ -73,7 +73,7 @@ export function SavingsProjectionChart({
         )}
       </Svg>
       <View style={styles.footer}>
-        <Text style={styles.axis}>Hoy</Text>
+        <Text style={styles.axis}>Now</Text>
         <Text style={[styles.axis, { color: accent }]}>
           {last ? formatAud(last.value) : ''}
         </Text>

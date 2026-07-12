@@ -436,6 +436,12 @@ export default function AddScreen() {
             <Ionicons name="images-outline" size={18} color={modeMeta.color} />
             <Text style={[styles.ghostLabel, { color: modeMeta.color }]}>Choose from gallery</Text>
           </Pressable>
+          <Pressable
+            onPress={() => router.push('/receipts' as never)}
+            style={styles.viewReceipts}>
+            <Ionicons name="folder-open-outline" size={16} color={Palette.cyan} />
+            <Text style={styles.viewReceiptsText}>View saved receipts</Text>
+          </Pressable>
         </Section>
       )}
 
@@ -647,6 +653,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   ghostLabel: { fontFamily: Fonts.display, fontWeight: '800', fontSize: 14 },
+  viewReceipts: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  viewReceiptsText: { color: Palette.cyan, fontWeight: '700', fontSize: 13 },
   receiptHero: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
   receiptBlob: {
     width: 88,

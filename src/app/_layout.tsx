@@ -93,6 +93,8 @@ export default function RootLayout() {
           <Stack.Screen name="account/sheets" options={{ title: 'Google Sheets', presentation: 'modal' }} />
           <Stack.Screen name="account/ai" options={{ title: 'Receipt AI', presentation: 'modal' }} />
           <Stack.Screen name="receipt/review" options={{ title: 'Review receipt', presentation: 'modal' }} />
+          <Stack.Screen name="receipts/index" options={{ title: 'Receipts' }} />
+          <Stack.Screen name="receipts/[id]" options={{ title: 'Receipt', presentation: 'modal' }} />
           <Stack.Screen name="fixed/index" options={{ title: 'Fixed income & bills' }} />
           <Stack.Screen name="fixed/edit" options={{ title: 'Edit fixed item', presentation: 'modal' }} />
           <Stack.Screen name="categories" options={{ title: 'Categories' }} />
