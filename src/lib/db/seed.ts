@@ -26,22 +26,16 @@ const DEFAULT_CATEGORIES: Array<{ name: string; type: CategoryType; icon: string
   { name: 'Holiday', type: 'savings', icon: 'plane', color: CategoryPalette[5] },
 ];
 
-/** Seeds only structure (users + categories). No fake money data. */
-export async function seedIfNeeded(
-  profileName: string,
-  profileEmail: string,
+/** Always safe to call — fills missing users/categories without wiping real data. */
+export async function ensureHouseholdDefaults(
+  profileName = 'Me',
+  profileEmail = '',
   avatarUrl = ''
 ): Promise<void> {
-  const seeded = await getSetting('seeded_v1');
-  if (seeded === '1') {
-    await ensureOwnerProfile(profileName, profileEmail, avatarUrl);
-    return;
-  }
-
   await ensureOwnerProfile(profileName, profileEmail, avatarUrl);
 
   const users = await listUsers();
-  const primaryId = users[0]?.id;
+  const primaryId = users.find((u) => u.role === 'owner')?.id ?? users[0]?.id;
   if (primaryId && !users.some((u) => u.role === 'member')) {
     await upsertUser({
       id: createId(),
@@ -70,11 +64,23 @@ export async function seedIfNeeded(
     await upsertCategory(cat);
   }
 
-  if (primaryId) await setSetting('active_user_id', primaryId);
-  await setSetting('seeded_v1', '1');
+  const active = await getSetting('active_user_id');
+  if (!active && primaryId) await setSetting('active_user_id', primaryId);
   await setSetting('currency', 'AUD');
   await setSetting('week_starts', 'Monday');
-  await setSetting('sync_interval_sec', '45');
+  if ((await getSetting('sync_interval_sec')) == null) {
+    await setSetting('sync_interval_sec', '45');
+  }
+  await setSetting('seeded_v1', '1');
+}
+
+/** @deprecated use ensureHouseholdDefaults */
+export async function seedIfNeeded(
+  profileName: string,
+  profileEmail: string,
+  avatarUrl = ''
+): Promise<void> {
+  await ensureHouseholdDefaults(profileName, profileEmail, avatarUrl);
 }
 
 async function ensureOwnerProfile(name: string, email: string, avatarUrl: string) {
@@ -83,7 +89,7 @@ async function ensureOwnerProfile(name: string, email: string, avatarUrl: string
   if (owner) {
     await upsertUser({
       ...owner,
-      name: name || owner.name,
+      name: name || owner.name || 'Me',
       email: email || owner.email,
       avatar_url: avatarUrl || owner.avatar_url,
       updated_at: nowIso(),
@@ -93,7 +99,7 @@ async function ensureOwnerProfile(name: string, email: string, avatarUrl: string
   const id = createId();
   await upsertUser({
     id,
-    name,
+    name: name || 'Me',
     email,
     avatar_url: avatarUrl,
     role: 'owner',

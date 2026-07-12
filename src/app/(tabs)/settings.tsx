@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -8,12 +8,42 @@ import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
-import { setGeminiApiKey, getGeminiApiKey } from '@/lib/gemini/receipts';
+import {
+  getDeepSeekApiKey,
+  getGeminiApiKey,
+  getOpenRouterApiKey,
+  getOcrSpaceApiKey,
+  getReceiptProvider,
+  setDeepSeekApiKey,
+  setGeminiApiKey,
+  setOpenRouterApiKey,
+  setOcrSpaceApiKey,
+  setReceiptProvider,
+  type ReceiptAiProvider,
+} from '@/lib/ai/receipts';
 import { ensureSpreadsheet, pushFullSnapshot, syncNow } from '@/lib/sync/engine';
 import { exportTransactionsExcel, importTransactionsFromExcelBase64 } from '@/lib/excel/io';
 import { recomputeProductStats } from '@/lib/insights/market';
 import { scheduleFixedItemReminders } from '@/lib/notifications/schedule';
 import { saveGoogleSession, loadGoogleSession } from '@/lib/google/auth';
+
+const PROVIDERS: Array<{ id: ReceiptAiProvider; label: string; hint: string }> = [
+  {
+    id: 'openrouter',
+    label: 'OpenRouter (free)',
+    hint: 'Best free option — vision models. openrouter.ai',
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    hint: 'OCR.space (free) + DeepSeek text. platform.deepseek.com',
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini',
+    hint: 'Google AI Studio — if your quota still works',
+  },
+];
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -23,17 +53,32 @@ export default function SettingsScreen() {
   const refresh = useFinanceStore((s) => s.refresh);
   const runSync = useFinanceStore((s) => s.runSync);
   const setSession = useFinanceStore((s) => s.setSession);
+  const [provider, setProvider] = useState<ReceiptAiProvider>('openrouter');
+  const [openrouter, setOpenrouter] = useState('');
+  const [deepseek, setDeepseek] = useState('');
   const [gemini, setGemini] = useState('');
+  const [ocrSpace, setOcrSpace] = useState('');
   const [sheetId, setSheetId] = useState(session?.spreadsheetId ?? '');
   const [busy, setBusy] = useState(false);
 
-  const saveKey = async () => {
-    await setGeminiApiKey(gemini);
-    Alert.alert('Saved', 'Gemini API key stored securely on device.');
-  };
+  useEffect(() => {
+    void (async () => {
+      setProvider(await getReceiptProvider());
+      setOpenrouter(await getOpenRouterApiKey());
+      setDeepseek(await getDeepSeekApiKey());
+      setGemini(await getGeminiApiKey());
+      const ocr = await getOcrSpaceApiKey();
+      setOcrSpace(ocr === 'helloworld' ? '' : ocr);
+    })();
+  }, []);
 
-  const loadKey = async () => {
-    setGemini(await getGeminiApiKey());
+  const saveAi = async () => {
+    await setReceiptProvider(provider);
+    await setOpenRouterApiKey(openrouter);
+    await setDeepSeekApiKey(deepseek);
+    await setGeminiApiKey(gemini);
+    if (ocrSpace.trim()) await setOcrSpaceApiKey(ocrSpace);
+    Alert.alert('Saved', `Receipt AI provider: ${provider}`);
   };
 
   const onSync = async () => {
@@ -74,7 +119,7 @@ export default function SettingsScreen() {
     const next = { ...session, spreadsheetId: sheetId.trim() };
     await saveGoogleSession(next);
     setSession(next);
-    const result = await syncNow();
+    const result = await syncNow({ force: true, push: true, pull: true });
     await refresh();
     Alert.alert('Linked', result.message);
   };
@@ -147,8 +192,15 @@ export default function SettingsScreen() {
 
       <SectionTitle title="Fixed & categories" />
       <GlassPanel style={{ gap: Spacing.sm }}>
-        <PrimaryButton label="Manage fixed income & bills" onPress={() => router.push('/fixed' as never)} />
-        <PrimaryButton label="Categories" onPress={() => router.push('/categories' as never)} variant="ghost" />
+        <PrimaryButton
+          label="Manage fixed income & bills"
+          onPress={() => router.push('/fixed' as never)}
+        />
+        <PrimaryButton
+          label="Categories"
+          onPress={() => router.push('/categories' as never)}
+          variant="ghost"
+        />
         <PrimaryButton label="Schedule payment notifications" onPress={onNotify} variant="ghost" />
       </GlassPanel>
 
@@ -157,19 +209,71 @@ export default function SettingsScreen() {
         <PrimaryButton label="Recompute & open insights" onPress={onInsights} />
       </GlassPanel>
 
-      <SectionTitle title="Gemini receipts" />
+      <SectionTitle
+        title="Receipt AI"
+        subtitle="DeepSeek is text-only — we OCR the photo first. OpenRouter can read images directly."
+      />
       <GlassPanel style={{ gap: Spacing.sm }}>
-        <TextInput
-          value={gemini}
-          onChangeText={setGemini}
-          placeholder="Gemini API key"
-          placeholderTextColor={Palette.textDim}
-          secureTextEntry
-          autoCapitalize="none"
-          style={styles.input}
-          onFocus={loadKey}
-        />
-        <PrimaryButton label="Save API key" onPress={saveKey} variant="ghost" />
+        <View style={styles.chips}>
+          {PROVIDERS.map((p) => (
+            <Pressable
+              key={p.id}
+              onPress={() => setProvider(p.id)}
+              style={[styles.chip, provider === p.id && styles.chipOn]}>
+              <Text style={[styles.chipText, provider === p.id && styles.chipTextOn]}>{p.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.meta}>{PROVIDERS.find((p) => p.id === provider)?.hint}</Text>
+
+        {provider === 'openrouter' ? (
+          <TextInput
+            value={openrouter}
+            onChangeText={setOpenrouter}
+            placeholder="OpenRouter API key (sk-or-…)"
+            placeholderTextColor={Palette.textDim}
+            secureTextEntry
+            autoCapitalize="none"
+            style={styles.input}
+          />
+        ) : null}
+
+        {provider === 'deepseek' ? (
+          <>
+            <TextInput
+              value={deepseek}
+              onChangeText={setDeepseek}
+              placeholder="DeepSeek API key (sk-…)"
+              placeholderTextColor={Palette.textDim}
+              secureTextEntry
+              autoCapitalize="none"
+              style={styles.input}
+            />
+            <TextInput
+              value={ocrSpace}
+              onChangeText={setOcrSpace}
+              placeholder="OCR.space key (optional — free at ocr.space)"
+              placeholderTextColor={Palette.textDim}
+              secureTextEntry
+              autoCapitalize="none"
+              style={styles.input}
+            />
+          </>
+        ) : null}
+
+        {provider === 'gemini' ? (
+          <TextInput
+            value={gemini}
+            onChangeText={setGemini}
+            placeholder="Gemini API key"
+            placeholderTextColor={Palette.textDim}
+            secureTextEntry
+            autoCapitalize="none"
+            style={styles.input}
+          />
+        ) : null}
+
+        <PrimaryButton label="Save receipt AI settings" onPress={saveAi} />
       </GlassPanel>
 
       <SectionTitle title="Excel bridge" />
@@ -201,4 +305,16 @@ const styles = StyleSheet.create({
     color: Palette.text,
     backgroundColor: Palette.panelElevated,
   },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Radii.pill,
+    backgroundColor: Palette.panelElevated,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+  },
+  chipOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
+  chipText: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
+  chipTextOn: { color: Palette.void },
 });

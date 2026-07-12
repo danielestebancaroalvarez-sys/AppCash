@@ -43,16 +43,19 @@ function AuthGate({ children }: { children: ReactNode }) {
       if (!alive || syncing) return;
       setSyncing(true);
       try {
-        await syncNow();
+        // Background: only push when there are pending changes; pull lightly
+        await syncNow({ force: false, push: true, pull: true });
         await refresh();
       } finally {
         if (alive) setSyncing(false);
       }
     };
-    tick();
-    const id = setInterval(tick, 45000);
+    // First sync after a short delay so login/create-sheet writes settle
+    const boot = setTimeout(tick, 8000);
+    const id = setInterval(tick, 120000);
     return () => {
       alive = false;
+      clearTimeout(boot);
       clearInterval(id);
     };
   }, [ready, session, refresh]);

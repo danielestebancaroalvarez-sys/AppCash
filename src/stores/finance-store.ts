@@ -23,7 +23,7 @@ import {
   listTransactions,
   listUsers,
 } from '@/lib/db';
-import { seedIfNeeded } from '@/lib/db/seed';
+import { ensureHouseholdDefaults } from '@/lib/db/seed';
 import {
   loadGoogleSession,
   clearGoogleSession,
@@ -84,7 +84,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     configureGoogleSignIn();
     const session = await loadGoogleSession();
     if (session) {
-      await seedIfNeeded(session.name, session.email, session.photoUrl ?? '');
+      await ensureHouseholdDefaults(session.name, session.email, session.photoUrl ?? '');
     }
     const activeUserId = await getSetting('active_user_id');
     const lastSyncAt = await getSetting('last_sync_at');
@@ -100,6 +100,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
 
   refresh: async () => {
+    const session = get().session;
+    if (session) {
+      await ensureHouseholdDefaults(session.name, session.email, session.photoUrl ?? '');
+    }
     const [
       users,
       categories,
@@ -178,7 +182,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         // spreadsheet creation may fail without network/scopes
       }
     }
-    const result = await syncNow();
+    const result = await syncNow({ force: true, push: true, pull: true });
     set({ syncMessage: result.message, lastSyncAt: new Date().toISOString() });
     await get().refresh();
   },

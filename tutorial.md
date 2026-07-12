@@ -88,16 +88,19 @@ Aparece en **Search** y en el Dashboard de esa semana.
 
 ## 7. Escanear un recibo (Woolworths / Aldi)
 
-1. En **Settings**, guarda tu **Gemini API key** (o en `.env` como `EXPO_PUBLIC_GEMINI_API_KEY`).
-2. Tab **+ → Receipt scan**.
-3. **Take photo** o **Choose from gallery**.
-4. Revisa ítems, totales, tienda y quién pagó.
-5. **Confirm & save**.
+DeepSeek **no ve fotos** (solo texto). En AppCash puedes usar:
 
-Queda:
-- 1 transacción del total
-- detalle de productos (`receipt_items`)
-- listo para insights de mercado
+| Proveedor | Cómo | Key gratis |
+|-----------|------|------------|
+| **OpenRouter** (recomendado) | Lee la foto directo con modelo free | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| **DeepSeek** | OCR.space (gratis) + DeepSeek estructura JSON | [platform.deepseek.com](https://platform.deepseek.com) + [ocr.space](https://ocr.space/ocrapi) |
+| Gemini | Si tu cuota aún funciona | Google AI Studio |
+
+1. **Settings → Receipt AI** → elige proveedor y pega la API key → **Save**.
+2. Tab **+ → Receipt scan**.
+3. Foto o galería → revisa ítems → **Confirm & save**.
+
+Modelo OpenRouter por defecto: `openrouter/free` (elige solo un modelo gratis que soporte visión). Si falla, la app prueba otros free automáticamente.
 
 ---
 

@@ -159,6 +159,33 @@ export async function readSheet(
   return (data.values as string[][]) ?? [];
 }
 
+/** One API call for all sheet ranges. */
+export async function batchReadSheets(
+  accessToken: string,
+  spreadsheetId: string,
+  sheets: SheetName[] = [...SHEET_NAMES]
+): Promise<Record<SheetName, string[][]>> {
+  const ranges = sheets.map((s) => `${s}!A:Z`);
+  const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join('&');
+  const data = await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchGet?${qs}`);
+  const out = {} as Record<SheetName, string[][]>;
+  const valueRanges = (data.valueRanges as Array<{ range?: string; values?: string[][] }>) ?? [];
+  for (const sheet of sheets) {
+    const match = valueRanges.find((vr) => (vr.range ?? '').startsWith(`'${sheet}'`) || (vr.range ?? '').startsWith(sheet));
+    out[sheet] = match?.values ?? [];
+  }
+  // Fallback mapping by index if range parse fails
+  if (valueRanges.length === sheets.length) {
+    sheets.forEach((sheet, i) => {
+      if (!out[sheet]?.length && valueRanges[i]?.values) {
+        out[sheet] = valueRanges[i].values ?? [];
+      }
+      if (!out[sheet]) out[sheet] = valueRanges[i]?.values ?? [];
+    });
+  }
+  return out;
+}
+
 export async function clearAndWriteSheet(
   accessToken: string,
   spreadsheetId: string,
@@ -178,6 +205,33 @@ export async function clearAndWriteSheet(
       body: JSON.stringify({ values: [SHEET_HEADERS[sheet], ...rows] }),
     }
   );
+}
+
+/** Two write requests total: batch clear + batch update (avoids rate limits). */
+export async function batchWriteAllSheets(
+  accessToken: string,
+  spreadsheetId: string,
+  sheets: Array<{ sheet: SheetName; rows: string[][] }>
+): Promise<void> {
+  if (!sheets.length) return;
+
+  await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchClear`, {
+    method: 'POST',
+    body: JSON.stringify({
+      ranges: sheets.map((s) => `${s.sheet}!A:Z`),
+    }),
+  });
+
+  await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({
+      valueInputOption: 'RAW',
+      data: sheets.map(({ sheet, rows }) => ({
+        range: `${sheet}!A1`,
+        values: [SHEET_HEADERS[sheet], ...rows],
+      })),
+    }),
+  });
 }
 
 function rowToObject(headers: string[], row: string[]): Record<string, string> {

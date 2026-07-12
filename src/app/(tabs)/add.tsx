@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
@@ -19,7 +19,7 @@ import { nowIso, todayIsoDate } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
 import { upsertTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
-import { parseReceiptWithGemini } from '@/lib/gemini/receipts';
+import { parseReceiptImage } from '@/lib/ai/receipts';
 import type { TransactionType } from '@/types/models';
 
 export default function AddScreen() {
@@ -27,14 +27,23 @@ export default function AddScreen() {
   const users = useFinanceStore((s) => s.users);
   const categories = useFinanceStore((s) => s.categories);
   const activeUserId = useFinanceStore((s) => s.activeUserId);
+  const session = useFinanceStore((s) => s.session);
   const refresh = useFinanceStore((s) => s.refresh);
   const [mode, setMode] = useState<'expense' | 'income' | 'receipt'>('expense');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [merchant, setMerchant] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
-  const [userId, setUserId] = useState<string>(activeUserId ?? '');
+  const [userId, setUserId] = useState<string>('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    setCategoryId('');
+  }, [mode]);
 
   const filteredCats = useMemo(() => {
     const type = mode === 'income' ? 'income' : 'expense';
@@ -44,12 +53,35 @@ export default function AddScreen() {
   const effectiveCategory = categoryId || filteredCats[0]?.id || '';
   const effectiveUser = userId || activeUserId || users[0]?.id || '';
 
+  useEffect(() => {
+    if (!userId && effectiveUser) setUserId(effectiveUser);
+  }, [effectiveUser, userId]);
+
+  useEffect(() => {
+    if (!categoryId && filteredCats[0]?.id) setCategoryId(filteredCats[0].id);
+  }, [filteredCats, categoryId]);
+
   const saveQuick = async () => {
     const value = parseAmount(amount);
-    if (!value || !effectiveUser || !effectiveCategory) {
-      Alert.alert('Missing data', 'Enter an amount and select category/user.');
+    if (!value) {
+      Alert.alert('Missing amount', 'Enter an amount in AUD.');
       return;
     }
+    if (!effectiveUser) {
+      Alert.alert(
+        'No profile',
+        'No household profiles found. Open Profile and stay signed in, or pull to refresh.'
+      );
+      return;
+    }
+    if (!effectiveCategory) {
+      Alert.alert('No category', 'Create a category in Settings → Categories, then try again.', [
+        { text: 'Open categories', onPress: () => router.push('/categories' as never) },
+        { text: 'OK' },
+      ]);
+      return;
+    }
+
     const type: TransactionType = mode === 'income' ? 'income_sporadic' : 'expense_sporadic';
     const tx = {
       id: createId(),
@@ -70,7 +102,7 @@ export default function AddScreen() {
     setAmount('');
     setNote('');
     setMerchant('');
-    Alert.alert('Saved', 'Entry added to your ledger.');
+    Alert.alert('Saved', `${mode === 'income' ? 'Income' : 'Expense'} of $${value.toFixed(2)} AUD added.`);
   };
 
   const scanReceipt = async (fromCamera: boolean) => {
@@ -91,10 +123,10 @@ export default function AddScreen() {
       const uri = result.assets[0].uri;
       let parsed;
       try {
-        parsed = await parseReceiptWithGemini(uri);
+        parsed = await parseReceiptImage(uri);
       } catch (e) {
         Alert.alert(
-          'Gemini parse',
+          'Receipt scan',
           e instanceof Error ? e.message : 'Could not parse receipt',
           [
             {
@@ -134,6 +166,10 @@ export default function AddScreen() {
   return (
     <Screen>
       <Text style={styles.title}>Quick add</Text>
+      {session ? (
+        <Text style={styles.hint}>Signed in as {session.name}</Text>
+      ) : null}
+
       <View style={styles.modes}>
         {(['expense', 'income', 'receipt'] as const).map((m) => (
           <Pressable
@@ -175,39 +211,63 @@ export default function AddScreen() {
             style={styles.input}
           />
 
-          <Text style={styles.label}>Category</Text>
-          <View style={styles.chips}>
-            {filteredCats.map((c) => (
-              <Pressable
-                key={c.id}
-                onPress={() => setCategoryId(c.id)}
-                style={[styles.chip, effectiveCategory === c.id && { backgroundColor: c.color }]}>
-                <Text
-                  style={[
-                    styles.chipText,
-                    effectiveCategory === c.id && { color: Palette.void },
-                  ]}>
-                  {c.name}
-                </Text>
-              </Pressable>
-            ))}
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>Category</Text>
+            <Pressable onPress={() => router.push('/categories' as never)}>
+              <Text style={styles.link}>Manage</Text>
+            </Pressable>
           </View>
+          {filteredCats.length === 0 ? (
+            <Pressable
+              onPress={() => router.push('/categories' as never)}
+              style={styles.emptyBox}>
+              <Text style={styles.emptyText}>
+                No {mode} categories yet. Tap to create one.
+              </Text>
+            </Pressable>
+          ) : (
+            <View style={styles.chips}>
+              {filteredCats.map((c) => {
+                const selected = effectiveCategory === c.id;
+                return (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => setCategoryId(c.id)}
+                    style={[styles.chip, selected && { backgroundColor: c.color, borderColor: c.color }]}>
+                    <Text style={[styles.chipText, selected && { color: Palette.void, fontWeight: '700' }]}>
+                      {c.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
           <Text style={styles.label}>Who</Text>
-          <View style={styles.chips}>
-            {users.map((u) => (
-              <Pressable
-                key={u.id}
-                onPress={() => setUserId(u.id)}
-                style={[styles.chip, effectiveUser === u.id && styles.chipOn]}>
-                <Text style={[styles.chipText, effectiveUser === u.id && styles.chipTextOn]}>
-                  {u.name}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {users.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyText}>No profiles yet. Pull to refresh or reopen the app.</Text>
+            </View>
+          ) : (
+            <View style={styles.chips}>
+              {users.map((u) => {
+                const selected = effectiveUser === u.id;
+                return (
+                  <Pressable
+                    key={u.id}
+                    onPress={() => setUserId(u.id)}
+                    style={[styles.chip, selected && styles.chipOn]}>
+                    <Text style={[styles.chipText, selected && styles.chipTextOn]}>{u.name || 'User'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
-          <PrimaryButton label="Save entry" onPress={saveQuick} />
+          <PrimaryButton
+            label={mode === 'income' ? 'Save income' : 'Save expense'}
+            onPress={saveQuick}
+          />
         </GlassPanel>
       ) : (
         <GlassPanel glow style={{ gap: Spacing.md }}>
@@ -217,7 +277,7 @@ export default function AddScreen() {
           />
           <SectionTitle
             title="Scan supermarket receipt"
-            subtitle="Gemini extracts line items from Woolworths / Aldi photos"
+            subtitle="AI extracts line items from Woolworths / Aldi photos"
           />
           <PrimaryButton
             label={busy ? 'Reading…' : 'Take photo'}
@@ -242,8 +302,9 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.display,
     fontSize: 28,
     fontWeight: '800',
-    marginBottom: Spacing.md,
+    marginBottom: 4,
   },
+  hint: { color: Palette.textDim, marginBottom: Spacing.md, fontSize: 12 },
   modes: { flexDirection: 'row', gap: 8, marginBottom: Spacing.md },
   mode: {
     flex: 1,
@@ -258,6 +319,8 @@ const styles = StyleSheet.create({
   modeText: { color: Palette.textMuted, fontSize: 12, fontWeight: '700' },
   modeTextOn: { color: Palette.void },
   label: { color: Palette.textMuted, fontSize: 12 },
+  link: { color: Palette.cyan, fontSize: 12, fontWeight: '700' },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   input: {
     borderWidth: 1,
     borderColor: Palette.stroke,
@@ -269,15 +332,25 @@ const styles = StyleSheet.create({
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: Radii.pill,
     backgroundColor: Palette.panelElevated,
     borderWidth: 1,
     borderColor: Palette.stroke,
+    minWidth: 72,
+    alignItems: 'center',
   },
   chipOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
-  chipText: { color: Palette.textMuted, fontSize: 12 },
+  chipText: { color: Palette.textMuted, fontSize: 13 },
   chipTextOn: { color: Palette.void, fontWeight: '700' },
+  emptyBox: {
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    borderRadius: Radii.md,
+    padding: Spacing.md,
+    backgroundColor: Palette.panelElevated,
+  },
+  emptyText: { color: Palette.amber, fontSize: 13, lineHeight: 18 },
   receiptArt: { width: '100%', height: 140, borderRadius: Radii.md, opacity: 0.9 },
 });
