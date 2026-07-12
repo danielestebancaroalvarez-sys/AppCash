@@ -358,6 +358,11 @@ export async function listTransactions(): Promise<Transaction[]> {
   return db.getAllAsync<Transaction>('SELECT * FROM transactions ORDER BY date DESC, created_at DESC');
 }
 
+export async function deleteTransaction(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM transactions WHERE id = ?', [id]);
+}
+
 export async function upsertReceipt(r: Receipt): Promise<void> {
   const db = await getDb();
   await db.runAsync(

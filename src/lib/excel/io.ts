@@ -89,3 +89,40 @@ export async function importTransactionsFromExcelBase64(base64: string): Promise
   }
   return count;
 }
+
+/** Share filtered (or all) transactions as CSV. */
+export async function exportTransactionsCsv(
+  txs: Transaction[],
+  users: Awaited<ReturnType<typeof listUsers>>,
+  categories: Awaited<ReturnType<typeof listCategories>>
+): Promise<void> {
+  const userMap = new Map(users.map((u) => [u.id, u.name]));
+  const catMap = new Map(categories.map((c) => [c.id, c.name]));
+  const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const header = ['date', 'type', 'amount_aud', 'category', 'user', 'merchant', 'note'];
+  const lines = [
+    header.join(','),
+    ...txs.map((t) =>
+      [
+        t.date,
+        t.type,
+        String(t.amount_aud),
+        escape(catMap.get(t.category_id) ?? ''),
+        escape(userMap.get(t.user_id) ?? ''),
+        escape(t.merchant),
+        escape(t.note),
+      ].join(',')
+    ),
+  ];
+  const path = `${FileSystem.cacheDirectory}appcash-search-${Date.now()}.csv`;
+  await FileSystem.writeAsStringAsync(path, lines.join('\n'), {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(path, {
+      mimeType: 'text/csv',
+      dialogTitle: 'Export CSV',
+      UTI: 'public.comma-separated-values-text',
+    });
+  }
+}
