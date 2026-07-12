@@ -15,6 +15,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { addWeeks, format } from 'date-fns';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel } from '@/components/ui/Primitives';
+import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
+import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { categoryIonicon } from '@/constants/category-icons';
@@ -192,7 +194,19 @@ export default function SearchScreen() {
         </Pressable>
       </View>
 
-      <GlassPanel style={styles.filters}>
+      <CollapsibleWidget
+        accent={Palette.cyan}
+        defaultExpanded={false}
+        header={<WidgetTitle icon="options-outline" title="Filters" />}
+        collapsedSummary={
+          <Text style={styles.filterSummary}>
+            {periodLabel}
+            {typeFilter !== 'all' ? ` · ${typeFilter}` : ''}
+            {categoryId !== 'all' ? ` · ${categoryLabel}` : ''}
+            {userId !== 'all' ? ` · ${userLabel}` : ''}
+            {q.trim() ? ` · “${q.trim()}”` : ''}
+          </Text>
+        }>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color={Palette.textDim} />
           <TextInput
@@ -333,7 +347,7 @@ export default function SearchScreen() {
             </Pressable>
           </View>
         ) : null}
-      </GlassPanel>
+      </CollapsibleWidget>
 
       {rows.length === 0 ? (
         <GlassPanel>
@@ -540,7 +554,7 @@ const styles = StyleSheet.create({
     borderRadius: Radii.pill,
   },
   csvText: { color: Palette.void, fontWeight: '800', fontSize: 13 },
-  filters: { gap: 8, marginBottom: Spacing.md },
+  filterSummary: { color: Palette.textDim, fontSize: 12 },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',

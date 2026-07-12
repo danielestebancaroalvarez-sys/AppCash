@@ -102,7 +102,7 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
     id: 'converter',
     label: 'Converter COP ↔ AUD',
     hint: 'Live exchange rate',
-    defaultOn: false,
+    defaultOn: true,
   },
 ];
 
