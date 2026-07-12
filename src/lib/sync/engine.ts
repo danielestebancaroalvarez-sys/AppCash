@@ -182,6 +182,7 @@ async function buildSnapshots(): Promise<Array<{ sheet: SheetName; rows: string[
     nombre: u.name,
     email: u.email,
     rol: u.role,
+    foto: u.avatar_url,
   }));
 
   const categorias = categories.map((c) => ({
@@ -364,7 +365,7 @@ export async function pullFromSheets(): Promise<boolean> {
       id: r.id || createId(),
       name: r.nombre || 'User',
       email: r.email,
-      avatar_url: '',
+      avatar_url: r.foto || '',
       role: r.rol || 'member',
       updated_at: nowIso(),
     }));

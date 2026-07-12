@@ -1,9 +1,10 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Palette, Radii, Spacing } from '@/constants/theme';
 import type { ParsedReceipt } from '@/types/models';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -113,14 +114,18 @@ export default function ReceiptReviewScreen() {
         <TextInput value={total} onChangeText={setTotal} keyboardType="decimal-pad" style={styles.input} placeholderTextColor={Palette.textDim} />
         <Text style={styles.label}>Who paid</Text>
         <View style={styles.chips}>
-          {users.map((u) => (
-            <Text
-              key={u.id}
-              onPress={() => setUserId(u.id)}
-              style={[styles.chip, userId === u.id && styles.chipOn]}>
-              {u.name}
-            </Text>
-          ))}
+          {users.map((u) => {
+            const on = userId === u.id;
+            return (
+              <Pressable
+                key={u.id}
+                onPress={() => setUserId(u.id)}
+                style={[styles.personChip, on && styles.personChipOn]}>
+                <UserAvatar user={u} size={22} selected={on} />
+                <Text style={[styles.personChipText, on && styles.personChipTextOn]}>{u.name}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       </GlassPanel>
 
@@ -173,14 +178,19 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.panelElevated,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    color: Palette.textMuted,
+  personChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: Palette.panelElevated,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: Radii.pill,
-    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Palette.stroke,
   },
-  chipOn: { color: Palette.void, backgroundColor: Palette.cyan },
+  personChipOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
+  personChipText: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
+  personChipTextOn: { color: Palette.void },
   row: { flexDirection: 'row', gap: 8 },
 });

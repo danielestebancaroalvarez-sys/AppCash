@@ -1,13 +1,34 @@
 import { Tabs, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii } from '@/constants/theme';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
+import { useFinanceStore } from '@/stores/finance-store';
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
   return (
     <View style={[styles.iconWrap, focused && styles.iconFocused]}>
       <Text style={[styles.iconGlyph, focused && styles.iconGlyphFocused]}>{label}</Text>
     </View>
+  );
+}
+
+function HeaderProfileButton() {
+  const router = useRouter();
+  const session = useFinanceStore((s) => s.session);
+  const users = useFinanceStore((s) => s.users);
+  const activeUserId = useFinanceStore((s) => s.activeUserId);
+  const active = users.find((u) => u.id === activeUserId) || users.find((u) => u.role === 'owner');
+
+  return (
+    <Pressable onPress={() => router.push('/profile' as never)} style={styles.headerBtn}>
+      <UserAvatar
+        user={active}
+        photoUrl={session?.photoUrl}
+        name={session?.name || active?.name}
+        size={28}
+      />
+    </Pressable>
   );
 }
 
@@ -40,9 +61,7 @@ export default function TabsLayout() {
             <Pressable onPress={() => router.push('/notifications' as never)} style={styles.headerBtn}>
               <Text style={styles.headerBtnText}>🔔</Text>
             </Pressable>
-            <Pressable onPress={() => router.push('/profile' as never)} style={styles.headerBtn}>
-              <Text style={styles.headerBtnText}>👤</Text>
-            </Pressable>
+            <HeaderProfileButton />
           </View>
         ),
       }}>
@@ -120,9 +139,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: Palette.panelElevated,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   headerBtnText: { fontSize: 14 },
 });

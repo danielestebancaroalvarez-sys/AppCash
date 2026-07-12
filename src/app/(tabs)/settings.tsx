@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
@@ -195,11 +196,19 @@ export default function SettingsScreen() {
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <Text style={styles.title}>Settings</Text>
-      <Text style={styles.sub}>
-        {session?.email ?? 'Not signed in'} · Last sync:{' '}
-        {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : 'never'}
-        {' · '}pull to sync Sheet
-      </Text>
+      <View style={styles.subRow}>
+        <UserAvatar
+          photoUrl={session?.photoUrl}
+          name={session?.name}
+          size={28}
+        />
+        <Text style={styles.sub}>
+          {session?.name ? `${session.name} · ` : ''}
+          {session?.email ?? 'Not signed in'} · Last sync:{' '}
+          {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : 'never'}
+          {' · '}pull to sync Sheet
+        </Text>
+      </View>
 
       <SectionTitle
         title="Google Sheets"
@@ -348,7 +357,14 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
   },
-  sub: { color: Palette.textMuted, marginBottom: Spacing.md, marginTop: 4, fontSize: 12 },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: Spacing.md,
+    marginTop: 4,
+  },
+  sub: { color: Palette.textMuted, fontSize: 12, flex: 1 },
   meta: { color: Palette.textDim, fontSize: 12 },
   input: {
     borderWidth: 1,

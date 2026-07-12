@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
 import { AppModal } from '@/components/ui/AppModal';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 
@@ -28,18 +29,22 @@ export default function ProfileScreen() {
     }
   };
 
+  const owner =
+    users.find(
+      (u) => u.email && session?.email && u.email.toLowerCase() === session.email.toLowerCase()
+    ) ||
+    users.find((u) => u.role === 'owner') ||
+    users[0];
+
   return (
     <Screen tabAware={false}>
       <GlassPanel glow style={styles.hero}>
-        {session?.photoUrl ? (
-          <Image source={{ uri: session.photoUrl }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarLetter}>
-              {(session?.name || users[0]?.name || 'A').slice(0, 1).toUpperCase()}
-            </Text>
-          </View>
-        )}
+        <UserAvatar
+          user={owner}
+          photoUrl={session?.photoUrl || owner?.avatar_url}
+          name={session?.name || owner?.name}
+          size={84}
+        />
         <Text style={styles.name}>
           {session?.name || users.find((u) => u.id === activeUserId)?.name || 'AppCash'}
         </Text>
@@ -57,11 +62,16 @@ export default function ProfileScreen() {
           key={u.id}
           onPress={() => setActiveUser(u.id)}
           style={[styles.user, activeUserId === u.id ? styles.userOn : null]}>
-          <Text style={styles.userName}>{u.name}</Text>
-          <Text style={styles.userMeta}>
-            {u.role}
-            {u.email ? ` · ${u.email}` : ''}
-          </Text>
+          <View style={styles.userRow}>
+            <UserAvatar user={u} size={40} selected={activeUserId === u.id} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.userName}>{u.name}</Text>
+              <Text style={styles.userMeta}>
+                {u.role}
+                {u.email ? ` · ${u.email}` : ''}
+              </Text>
+            </View>
+          </View>
         </GlassPanel>
       ))}
 
@@ -84,20 +94,12 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   hero: { alignItems: 'center', marginBottom: Spacing.lg, gap: 6 },
-  avatar: { width: 84, height: 84, borderRadius: 42, marginBottom: 8 },
-  avatarFallback: {
-    backgroundColor: Palette.panelElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Palette.cyan,
-  },
-  avatarLetter: { color: Palette.cyan, fontSize: 32, fontWeight: '800' },
   name: { color: Palette.text, fontFamily: Fonts.display, fontSize: 22, fontWeight: '800' },
   email: { color: Palette.textMuted },
   sheet: { color: Palette.textDim, fontSize: 11, marginTop: 4 },
   user: { marginBottom: Spacing.sm },
   userOn: { borderColor: Palette.cyan },
-  userName: { color: Palette.text, fontWeight: '700' },
-  userMeta: { color: Palette.textDim, fontSize: 12, marginTop: 3 },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  userName: { color: Palette.text, fontWeight: '700', fontSize: 16 },
+  userMeta: { color: Palette.textDim, fontSize: 12, marginTop: 2 },
 });

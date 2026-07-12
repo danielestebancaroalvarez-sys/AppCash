@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
+import { UserName } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { formatAud } from '@/lib/money';
@@ -42,9 +43,12 @@ export default function FixedListScreen() {
                 {item.direction === 'in' ? 'Income' : 'Expense'} · {item.period} ·{' '}
                 {item.auto_debit ? 'Auto debit' : `Manual · notify ${item.notify_days_before}d`}
               </Text>
-              <Text style={styles.meta}>
-                {user?.name} · {cat?.name} · next {item.next_due}
-              </Text>
+              <View style={styles.metaRow}>
+                <UserName user={user} size={16} textStyle={styles.meta} />
+                <Text style={styles.meta}>
+                  · {cat?.name} · next {item.next_due}
+                </Text>
+              </View>
             </Pressable>
             <View style={{ alignItems: 'flex-end', gap: 8 }}>
               <Text
@@ -74,7 +78,14 @@ export default function FixedListScreen() {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', marginBottom: Spacing.sm, gap: 10 },
   name: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '700', fontSize: 16 },
-  meta: { color: Palette.textDim, fontSize: 12, marginTop: 3 },
+  meta: { color: Palette.textDim, fontSize: 12 },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 3,
+  },
   amt: { fontWeight: '800' },
   delete: { color: Palette.coral, fontSize: 12 },
 });

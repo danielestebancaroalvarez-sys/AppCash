@@ -39,7 +39,7 @@ export type SheetName = (typeof SHEET_NAMES)[number];
 
 export const SHEET_HEADERS: Record<SheetName, string[]> = {
   // ——— Editable ———
-  Usuarios: ['id', 'nombre', 'email', 'rol'],
+  Usuarios: ['id', 'nombre', 'email', 'rol', 'foto'],
   Categorias: ['id', 'nombre', 'tipo', 'icono', 'color'],
   Gastos_fijos: [
     'id',
@@ -156,7 +156,13 @@ export type AhorroRow = {
   recordatorio: boolean;
 };
 
-export type UsuarioRow = { id: string; nombre: string; email: string; rol: string };
+export type UsuarioRow = {
+  id: string;
+  nombre: string;
+  email: string;
+  rol: string;
+  foto: string;
+};
 export type CategoriaRow = {
   id: string;
   nombre: string;
@@ -379,6 +385,7 @@ export function parseUsuarioRows(values: string[][]): UsuarioRow[] {
     nombre: o.nombre || o.name || '',
     email: o.email || '',
     rol: o.rol || o.role || 'member',
+    foto: o.foto || o.avatar_url || o.photo || '',
   }));
 }
 

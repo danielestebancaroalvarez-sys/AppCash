@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { AmountText, GlassPanel, SectionTitle } from '@/components/ui/Primitives';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { BarWeek, DonutChart } from '@/components/charts/FinanceCharts';
 import { Fonts, FinanceColors, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore, useWeekRange } from '@/stores/finance-store';
@@ -65,7 +66,9 @@ export default function DashboardScreen() {
     });
 
     const byUser = users.map((u) => ({
+      id: u.id,
       name: u.name,
+      user: u,
       spent: weekTx
         .filter((t) => t.user_id === u.id && t.type !== 'income_sporadic')
         .reduce((a, t) => a + t.amount_aud, 0),
@@ -162,8 +165,9 @@ export default function DashboardScreen() {
       <SectionTitle title="By person" />
       <GlassPanel>
         {stats.byUser.map((u) => (
-          <View key={u.name} style={styles.personRow}>
-            <Text style={styles.personName}>{u.name}</Text>
+          <View key={u.id} style={styles.personRow}>
+            <UserAvatar user={u.user} size={32} />
+            <Text style={[styles.personName, { flex: 1 }]}>{u.name}</Text>
             <Text style={styles.personAmt}>{formatAud(u.spent)}</Text>
           </View>
         ))}
@@ -255,6 +259,8 @@ const styles = StyleSheet.create({
   marketPrice: { color: Palette.cyan, fontWeight: '800' },
   personRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,

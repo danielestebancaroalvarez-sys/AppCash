@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, SectionTitle } from '@/components/ui/Primitives';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { formatAud } from '@/lib/money';
 import { formatDisplayDate } from '@/lib/dates';
+import type { AppUser } from '@/types/models';
 
 export default function SearchScreen() {
   const transactions = useFinanceStore((s) => s.transactions);
@@ -47,6 +49,7 @@ export default function SearchScreen() {
           <Chip
             key={u.id}
             label={u.name}
+            user={u}
             active={userFilter === u.id}
             onPress={() => setUserFilter(u.id)}
           />
@@ -60,6 +63,7 @@ export default function SearchScreen() {
         const isIncome = t.type.includes('income') || t.type === 'savings_contrib';
         return (
           <GlassPanel key={t.id} style={styles.row}>
+            <UserAvatar user={user} name={user?.name ?? '?'} size={36} />
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>{t.merchant || cat?.name || t.type}</Text>
               <Text style={styles.rowMeta}>
@@ -78,13 +82,22 @@ export default function SearchScreen() {
   );
 }
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function Chip({
+  label,
+  active,
+  onPress,
+  user,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  user?: AppUser;
+}) {
   return (
-    <Text
-      onPress={onPress}
-      style={[styles.chip, active && styles.chipActive]}>
-      {label}
-    </Text>
+    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+      {user ? <UserAvatar user={user} size={18} selected={active} /> : null}
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -108,17 +121,19 @@ const styles = StyleSheet.create({
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: Spacing.sm },
   chip: {
-    color: Palette.textMuted,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: Palette.panelElevated,
-    overflow: 'hidden',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: Radii.pill,
     borderWidth: 1,
     borderColor: Palette.stroke,
-    fontSize: 12,
   },
-  chipActive: { color: Palette.void, backgroundColor: Palette.cyan, borderColor: Palette.cyan },
+  chipActive: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
+  chipText: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
+  chipTextActive: { color: Palette.void },
   row: { flexDirection: 'row', gap: 12, marginBottom: Spacing.sm, alignItems: 'center' },
   rowTitle: { color: Palette.text, fontWeight: '700' },
   rowMeta: { color: Palette.textDim, fontSize: 12, marginTop: 3 },

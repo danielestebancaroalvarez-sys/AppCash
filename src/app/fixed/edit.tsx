@@ -14,6 +14,7 @@ import { format, parseISO } from 'date-fns';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { createId } from '@/lib/id';
@@ -188,11 +189,18 @@ export default function FixedEditScreen() {
 
         <Text style={styles.label}>Person</Text>
         <View style={styles.row}>
-          {users.map((u) => (
-            <Pressable key={u.id} onPress={() => setUserId(u.id)}>
-              <Text style={[styles.chip, userId === u.id && styles.chipOn]}>{u.name}</Text>
-            </Pressable>
-          ))}
+          {users.map((u) => {
+            const on = userId === u.id;
+            return (
+              <Pressable
+                key={u.id}
+                onPress={() => setUserId(u.id)}
+                style={[styles.personChip, on && styles.personChipOn]}>
+                <UserAvatar user={u} size={22} selected={on} />
+                <Text style={[styles.personChipText, on && styles.personChipTextOn]}>{u.name}</Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <Text style={styles.label}>Category</Text>
@@ -249,5 +257,19 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   chipOn: { color: Palette.void, backgroundColor: Palette.cyan },
+  personChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Palette.panelElevated,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+  },
+  personChipOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
+  personChipText: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
+  personChipTextOn: { color: Palette.void },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

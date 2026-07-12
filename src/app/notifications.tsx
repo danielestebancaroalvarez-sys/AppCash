@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, SectionTitle } from '@/components/ui/Primitives';
+import { UserName } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { upsertNotification } from '@/lib/db';
@@ -38,9 +39,16 @@ export default function NotificationsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{n.title}</Text>
                   <Text style={styles.body}>{n.body}</Text>
-                  <Text style={styles.meta}>
-                    {user?.name ?? 'Household'} · due {formatDisplayDate(n.due_at)} · {n.status}
-                  </Text>
+                  <View style={styles.metaRow}>
+                    {user ? (
+                      <UserName user={user} size={16} textStyle={styles.meta} />
+                    ) : (
+                      <Text style={styles.meta}>Household</Text>
+                    )}
+                    <Text style={styles.meta}>
+                      · due {formatDisplayDate(n.due_at)} · {n.status}
+                    </Text>
+                  </View>
                 </View>
               </GlassPanel>
             </Pressable>
@@ -63,6 +71,13 @@ const styles = StyleSheet.create({
   read: { opacity: 0.55 },
   name: { color: Palette.text, fontWeight: '700' },
   body: { color: Palette.textMuted, marginTop: 4 },
-  meta: { color: Palette.textDim, fontSize: 11, marginTop: 6 },
+  meta: { color: Palette.textDim, fontSize: 11 },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 6,
+  },
   empty: { color: Palette.textMuted },
 });

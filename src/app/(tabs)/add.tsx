@@ -7,6 +7,7 @@ import { Screen } from '@/components/ui/Screen';
 import { PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { categoryIonicon } from '@/constants/category-icons';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
@@ -218,7 +219,14 @@ export default function AddScreen() {
       </View>
 
       {session ? (
-        <Text style={styles.signedIn}>Signed in as {session.name}</Text>
+        <View style={styles.signedInRow}>
+          <UserAvatar
+            photoUrl={session.photoUrl}
+            name={session.name}
+            size={22}
+          />
+          <Text style={styles.signedIn}>Signed in as {session.name}</Text>
+        </View>
       ) : null}
 
       <View style={styles.modes}>
@@ -346,41 +354,32 @@ export default function AddScreen() {
                 </Text>
               </View>
             ) : (
-              <View style={styles.chips}>
-                {users.map((u) => {
-                  const selected = effectiveUser === u.id;
-                  return (
-                    <Pressable
-                      key={u.id}
-                      onPress={() => setUserId(u.id)}
+            <View style={styles.chips}>
+              {users.map((u) => {
+                const selected = effectiveUser === u.id;
+                return (
+                  <Pressable
+                    key={u.id}
+                    onPress={() => setUserId(u.id)}
+                    style={[
+                      styles.personChip,
+                      selected && {
+                        backgroundColor: 'rgba(61,231,255,0.18)',
+                        borderColor: Palette.cyan,
+                      },
+                    ]}>
+                    <UserAvatar user={u} size={28} selected={selected} />
+                    <Text
                       style={[
-                        styles.personChip,
-                        selected && {
-                          backgroundColor: 'rgba(61,231,255,0.18)',
-                          borderColor: Palette.cyan,
-                        },
+                        styles.personName,
+                        selected && { color: Palette.text, fontWeight: '700' },
                       ]}>
-                      <View
-                        style={[
-                          styles.avatar,
-                          selected && { borderColor: Palette.cyan, backgroundColor: Palette.cyan },
-                        ]}>
-                        <Text
-                          style={[styles.avatarLetter, selected && { color: Palette.void }]}>
-                          {(u.name || 'U').slice(0, 1).toUpperCase()}
-                        </Text>
-                      </View>
-                      <Text
-                        style={[
-                          styles.personName,
-                          selected && { color: Palette.text, fontWeight: '700' },
-                        ]}>
-                        {u.name || 'User'}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+                      {u.name || 'User'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             )}
           </Section>
 
@@ -508,7 +507,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   sub: { color: Palette.textMuted, fontSize: 13, marginTop: 2 },
-  signedIn: { color: Palette.textDim, fontSize: 12, marginBottom: Spacing.md },
+  signedInRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: Spacing.md,
+  },
+  signedIn: { color: Palette.textDim, fontSize: 12, flexShrink: 1 },
   modes: { flexDirection: 'row', gap: 8, marginBottom: Spacing.md },
   modeCard: {
     flex: 1,
@@ -604,17 +609,6 @@ const styles = StyleSheet.create({
     borderColor: Palette.stroke,
     backgroundColor: Palette.panelElevated,
   },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Palette.stroke,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Palette.panel,
-  },
-  avatarLetter: { color: Palette.cyan, fontWeight: '800', fontSize: 12 },
   personName: { color: Palette.textMuted, fontSize: 13 },
   emptyBox: {
     flexDirection: 'row',
