@@ -25,6 +25,8 @@ type Props = {
   onCancel?: () => void;
   onRequestClose?: () => void;
   confirmDisabled?: boolean;
+  /** Hide the cancel / secondary button (e.g. OK-only alerts). */
+  hideCancel?: boolean;
   style?: ViewStyle;
 };
 
@@ -45,6 +47,7 @@ export function AppModal({
   onCancel,
   onRequestClose,
   confirmDisabled,
+  hideCancel = false,
   style,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -53,6 +56,7 @@ export function AppModal({
   const confirmColor =
     tone === 'danger' ? Palette.coral : tone === 'accent' ? Palette.cyan : Palette.cyan;
   const confirmTextColor = tone === 'danger' ? Palette.void : Palette.void;
+  const showCancel = !hideCancel && Boolean(onCancel || close);
 
   return (
     <Modal
@@ -72,7 +76,7 @@ export function AppModal({
           {children}
 
           <View style={styles.actions}>
-            {onCancel || close ? (
+            {showCancel ? (
               <Pressable
                 onPress={onCancel ?? close}
                 style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}>

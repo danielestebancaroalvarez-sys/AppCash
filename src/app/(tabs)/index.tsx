@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { format, eachDayOfInterval } from 'date-fns';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { AmountText, GlassPanel, SectionTitle } from '@/components/ui/Primitives';
 import { BarWeek, DonutChart } from '@/components/charts/FinanceCharts';
-import { Fonts, FinanceColors, Palette, Spacing } from '@/constants/theme';
+import { Fonts, FinanceColors, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore, useWeekRange } from '@/stores/finance-store';
 import { formatAud } from '@/lib/money';
 import { inRange } from '@/lib/dates';
-import { recommendUpcoming } from '@/lib/insights/market';
+import { recommendUpcoming, recomputeProductStats } from '@/lib/insights/market';
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const transactions = useFinanceStore((s) => s.transactions);
   const fixedItems = useFinanceStore((s) => s.fixedItems);
   const categories = useFinanceStore((s) => s.categories);
@@ -62,20 +65,27 @@ export default function DashboardScreen() {
 
     const byUser = users.map((u) => ({
       name: u.name,
-      spent: weekTx.filter((t) => t.user_id === u.id && t.type !== 'income_sporadic').reduce((a, t) => a + t.amount_aud, 0),
+      spent: weekTx
+        .filter((t) => t.user_id === u.id && t.type !== 'income_sporadic')
+        .reduce((a, t) => a + t.amount_aud, 0),
     }));
 
     const net = incomeFixed + incomeSporadic - expenseFixed - expenseVariable;
-    return { incomeFixed, incomeSporadic, expenseFixed, expenseVariable, net, segments, bars, byUser, weekTx };
+    return { incomeFixed, incomeSporadic, expenseFixed, expenseVariable, net, segments, bars, byUser };
   }, [transactions, fixedItems, categories, users, start, end]);
 
-  const upcoming = recommendUpcoming(productStats, 10).slice(0, 3);
+  const upcoming = recommendUpcoming(productStats, 14).slice(0, 4);
+  const trackedCount = productStats.length;
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await runSync();
-    await refresh();
-    setRefreshing(false);
+    try {
+      await recomputeProductStats();
+      await runSync();
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   return (
@@ -112,6 +122,41 @@ export default function DashboardScreen() {
         <Kpi label="Variable out" value={stats.expenseVariable} tone="expense" />
       </View>
 
+      <SectionTitle title="Market prediction" subtitle="From your receipt history" />
+      <Pressable onPress={() => router.push('/insights' as never)}>
+        <GlassPanel style={styles.marketCard}>
+          <View style={styles.marketHead}>
+            <View style={styles.marketIcon}>
+              <Ionicons name="trending-up-outline" size={22} color={Palette.cyan} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.marketTitle}>Likely to buy soon</Text>
+              <Text style={styles.weekHint}>
+                {trackedCount
+                  ? `${trackedCount} products tracked · tap for full list`
+                  : 'Scan receipts to unlock predictions'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Palette.textDim} />
+          </View>
+          {upcoming.length ? (
+            upcoming.map((p) => (
+              <View key={p.id} style={styles.marketRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.personName}>{p.product_name_normalized}</Text>
+                  <Text style={styles.weekHint}>
+                    every ~{p.buy_frequency_days}d · avg {formatAud(p.avg_price)}
+                  </Text>
+                </View>
+                <Text style={styles.marketPrice}>{formatAud(p.avg_price)}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.empty}>No predictions yet — scan a few grocery receipts.</Text>
+          )}
+        </GlassPanel>
+      </Pressable>
+
       <SectionTitle title="Spend mix" subtitle="Categories this week" />
       {stats.segments.length ? (
         <DonutChart segments={stats.segments} centerLabel="Spend" />
@@ -133,24 +178,6 @@ export default function DashboardScreen() {
           </View>
         ))}
       </GlassPanel>
-
-      {upcoming.length ? (
-        <>
-          <SectionTitle title="Likely buys" subtitle="Based on your receipt history" />
-          <GlassPanel>
-            {upcoming.map((p) => (
-              <View key={p.id} style={styles.personRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.personName}>{p.product_name_normalized}</Text>
-                  <Text style={styles.weekHint}>
-                    every ~{p.buy_frequency_days}d · avg {formatAud(p.avg_price)}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </GlassPanel>
-        </>
-      ) : null}
 
       {syncMessage ? <Text style={styles.sync}>{syncMessage}</Text> : null}
     </Screen>
@@ -217,6 +244,25 @@ const styles = StyleSheet.create({
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   kpi: { width: '48%', flexGrow: 1 },
   kpiLabel: { color: Palette.textMuted, fontSize: 12, marginBottom: 6 },
+  marketCard: { marginBottom: Spacing.md, gap: 4 },
+  marketHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  marketIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radii.md,
+    backgroundColor: 'rgba(61,231,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  marketTitle: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '800', fontSize: 16 },
+  marketRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Palette.stroke,
+  },
+  marketPrice: { color: Palette.cyan, fontWeight: '800' },
   personRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -224,7 +270,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Palette.stroke,
   },
-  personName: { color: Palette.text, fontWeight: '600' },
+  personName: { color: Palette.text, fontWeight: '600', textTransform: 'capitalize' },
   personAmt: { color: FinanceColors.expense, fontWeight: '700' },
   empty: { color: Palette.textMuted },
   sync: { color: Palette.textDim, fontSize: 11, marginTop: Spacing.md, textAlign: 'center' },

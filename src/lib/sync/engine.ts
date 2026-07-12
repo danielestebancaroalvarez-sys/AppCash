@@ -1,15 +1,31 @@
 import {
+  asCategoryType,
   batchReadSheets,
   batchWriteAllSheets,
+  categoryTypeLabel,
   createAppSpreadsheet,
-  parseSheetRows,
+  directionLabel,
+  ensureWorkbookStructure,
+  labelToTxType,
+  parseAhorroRows,
+  parseCategoriaRows,
+  parseCompraRows,
+  parseDirection,
+  parseGastoFijoRows,
+  parsePeriod,
+  parseSpreadsheetId,
+  parseUsuarioRows,
+  periodLabel,
   serializeRows,
-  SHEET_NAMES,
+  spreadsheetEditUrl,
+  transactionTypeLabel,
   type SheetName,
 } from '@/lib/google/sheets';
 import { loadGoogleSession, saveGoogleSession } from '@/lib/google/auth';
 import {
+  clearFinanceData,
   enqueueOutbox,
+  getSetting,
   listCategories,
   listFixedItems,
   listNotifications,
@@ -31,13 +47,12 @@ import {
   upsertReceipt,
   upsertReceiptItem,
   upsertSavingsGoal,
-  upsertSavingsSim,
   upsertTransaction,
   upsertUser,
-  getSetting,
 } from '@/lib/db';
 import { createId } from '@/lib/id';
 import { nowIso } from '@/lib/dates';
+import { ensureHouseholdDefaults } from '@/lib/db/seed';
 import type {
   AppNotification,
   AppUser,
@@ -47,11 +62,10 @@ import type {
   Receipt,
   ReceiptItem,
   SavingsGoal,
-  SavingsSim,
   Transaction,
 } from '@/types/models';
 
-const MIN_SYNC_GAP_MS = 70_000; // stay under Sheets 60 writes/min with headroom
+const MIN_SYNC_GAP_MS = 70_000;
 let lastSyncAtMs = 0;
 let syncInFlight: Promise<{ ok: boolean; mode: 'local' | 'sheets'; message: string }> | null =
   null;
@@ -76,7 +90,20 @@ function friendlySheetsError(e: unknown): string {
 export async function ensureSpreadsheet(): Promise<string | null> {
   const session = await loadGoogleSession();
   if (!session?.accessToken) return null;
+  if (!session.spreadsheetId) return null;
+  try {
+    await ensureWorkbookStructure(session.accessToken, session.spreadsheetId);
+  } catch {
+    // offline
+  }
+  return session.spreadsheetId;
+}
+
+export async function createAndLinkSpreadsheet(): Promise<string | null> {
+  const session = await loadGoogleSession();
+  if (!session?.accessToken) return null;
   if (session.spreadsheetId) return session.spreadsheetId;
+
   const id = await createAppSpreadsheet(session.accessToken);
   await saveGoogleSession({ ...session, spreadsheetId: id });
   await setSetting('spreadsheet_id', id);
@@ -84,9 +111,236 @@ export async function ensureSpreadsheet(): Promise<string | null> {
     await pushFullSnapshot();
     lastSyncAtMs = Date.now();
   } catch {
-    // offline / quota — local data remains
+    // offline / quota
   }
   return id;
+}
+
+export async function linkSpreadsheetFromInput(raw: string): Promise<{
+  ok: boolean;
+  spreadsheetId?: string;
+  message: string;
+}> {
+  const session = await loadGoogleSession();
+  if (!session?.accessToken) {
+    return { ok: false, message: 'Sign in with Google first.' };
+  }
+  const id = parseSpreadsheetId(raw);
+  if (!id) {
+    return {
+      ok: false,
+      message: 'Paste the full Google Sheets URL or the spreadsheet ID.',
+    };
+  }
+  await ensureWorkbookStructure(session.accessToken, id);
+  await saveGoogleSession({ ...session, spreadsheetId: id });
+  await setSetting('spreadsheet_id', id);
+  const result = await syncNow({ force: true, push: true, pull: true });
+  return { ok: result.ok, spreadsheetId: id, message: result.message };
+}
+
+export async function unlinkSpreadsheetAndWipeLocal(): Promise<void> {
+  const session = await loadGoogleSession();
+  if (session) {
+    await saveGoogleSession({
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      expiresAt: session.expiresAt,
+      email: session.email,
+      name: session.name,
+      photoUrl: session.photoUrl,
+    });
+  }
+  await setSetting('spreadsheet_id', '');
+  await clearFinanceData();
+  await ensureHouseholdDefaults(session?.name || 'Me', session?.email || '', session?.photoUrl || '');
+}
+
+export function getSpreadsheetOpenUrl(spreadsheetId: string): string {
+  return spreadsheetEditUrl(spreadsheetId);
+}
+
+async function buildSnapshots(): Promise<Array<{ sheet: SheetName; rows: string[][] }>> {
+  const [users, categories, fixed, transactions, receipts, receiptItems, goals, notifs, products] =
+    await Promise.all([
+      listUsers(),
+      listCategories(),
+      listFixedItems(),
+      listTransactions(),
+      listReceipts(),
+      listReceiptItems(),
+      listSavingsGoals(),
+      listNotifications(),
+      listProductStats(),
+    ]);
+
+  const userName = (id: string) => users.find((u) => u.id === id)?.name ?? '';
+  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? '';
+
+  const usuarios = users.map((u) => ({
+    id: u.id,
+    nombre: u.name,
+    email: u.email,
+    rol: u.role,
+  }));
+
+  const categorias = categories.map((c) => ({
+    id: c.id,
+    nombre: c.name,
+    tipo: categoryTypeLabel(c.type),
+    icono: c.icon,
+    color: c.color,
+  }));
+
+  const gastos = fixed.map((f) => ({
+    id: f.id,
+    nombre: f.name,
+    quien: userName(f.user_id),
+    categoria: catName(f.category_id),
+    monto: f.amount_aud,
+    periodo: periodLabel(f.period),
+    direccion: directionLabel(f.direction),
+    debito_auto: f.auto_debit,
+    avisar_dias: f.notify_days_before,
+    activo: f.active,
+    proximo_pago: f.next_due,
+  }));
+
+  const receiptById = new Map(receipts.map((r) => [r.id, r]));
+  const txWithReceipt = new Set(
+    transactions.filter((t) => t.receipt_id).map((t) => t.receipt_id as string)
+  );
+
+  const compras: Array<Record<string, unknown>> = [];
+  for (const item of receiptItems) {
+    const receipt = receiptById.get(item.receipt_id);
+    if (!receipt) continue;
+    const purchased = receipt.purchased_at || nowIso();
+    const fecha = purchased.slice(0, 10);
+    const hora = purchased.includes('T') ? purchased.slice(11, 16) : '12:00';
+    const parentTx = transactions.find((t) => t.receipt_id === receipt.id);
+    compras.push({
+      id: item.id,
+      fecha,
+      hora,
+      quien: userName(receipt.user_id),
+      categoria: item.category_guess || (parentTx ? catName(parentTx.category_id) : ''),
+      tipo: item.name,
+      unidades: item.qty,
+      precio_unidad: item.unit_price_aud,
+      precio_total: item.line_total_aud,
+    });
+  }
+  for (const tx of transactions) {
+    if (tx.receipt_id && txWithReceipt.has(tx.receipt_id)) continue;
+    const created = tx.created_at || `${tx.date}T12:00:00`;
+    const hora = created.includes('T') ? created.slice(11, 16) : '12:00';
+    compras.push({
+      id: tx.id,
+      fecha: tx.date,
+      hora,
+      quien: userName(tx.user_id),
+      categoria: catName(tx.category_id),
+      tipo: tx.merchant || tx.note || transactionTypeLabel(tx.type),
+      unidades: 1,
+      precio_unidad: tx.amount_aud,
+      precio_total: tx.amount_aud,
+    });
+  }
+
+  const ahorros = goals.map((g) => ({
+    id: g.id,
+    nombre: g.name,
+    meta: g.target_aud,
+    actual: g.current_aud,
+    fecha_limite: g.deadline,
+    quien: userName(g.user_id),
+    actualizado: g.updated_at,
+  }));
+
+  const sysRecibos = receipts.map((r) => ({ ...r }));
+  const sysItems = receiptItems.map((r) => ({ ...r }));
+  const sysAvisos = notifs.map((n) => ({ ...n }));
+  const sysMercado = products.map((p) => ({ ...p }));
+
+  const configKeys = ['currency', 'week_starts', 'sync_interval_sec', 'active_user_id', 'gemini_model'];
+  const sysConfig: Array<{ clave: string; valor: string }> = [];
+  for (const key of configKeys) {
+    const value = await getSetting(key);
+    if (value != null) sysConfig.push({ clave: key, valor: value });
+  }
+
+  return [
+    { sheet: 'Usuarios', rows: serializeRows('Usuarios', usuarios) },
+    { sheet: 'Categorias', rows: serializeRows('Categorias', categorias) },
+    { sheet: 'Gastos_fijos', rows: serializeRows('Gastos_fijos', gastos) },
+    { sheet: 'Compras', rows: serializeRows('Compras', compras) },
+    { sheet: 'Ahorros', rows: serializeRows('Ahorros', ahorros) },
+    { sheet: '_sys_recibos', rows: serializeRows('_sys_recibos', sysRecibos) },
+    { sheet: '_sys_items_recibo', rows: serializeRows('_sys_items_recibo', sysItems) },
+    { sheet: '_sys_avisos', rows: serializeRows('_sys_avisos', sysAvisos) },
+    { sheet: '_sys_mercado', rows: serializeRows('_sys_mercado', sysMercado) },
+    { sheet: '_sys_config', rows: serializeRows('_sys_config', sysConfig) },
+  ];
+}
+
+async function resolveUserId(quien: string, cache: AppUser[]): Promise<string> {
+  const match = cache.find((u) => u.name.toLowerCase() === quien.trim().toLowerCase());
+  if (match) return match.id;
+  if (cache[0]) return cache[0].id;
+  const id = createId();
+  const user: AppUser = {
+    id,
+    name: quien.trim() || 'Me',
+    email: '',
+    avatar_url: '',
+    role: 'owner',
+    updated_at: nowIso(),
+  };
+  await upsertUser(user);
+  cache.push(user);
+  return id;
+}
+
+async function resolveCategoryId(
+  categoria: string,
+  hintType: string,
+  cache: Category[]
+): Promise<string> {
+  const match = cache.find((c) => c.name.toLowerCase() === categoria.trim().toLowerCase());
+  if (match) return match.id;
+  const id = createId();
+  const cat: Category = {
+    id,
+    name: categoria.trim() || 'Extras',
+    type: asCategoryType(hintType),
+    icon: 'tag',
+    color: '#8B7CFF',
+    is_system: false,
+    updated_at: nowIso(),
+  };
+  await upsertCategory(cat);
+  cache.push(cat);
+  return id;
+}
+
+function parseSysTable<T extends { id: string }>(
+  values: string[][],
+  mapRow: (o: Record<string, string>) => T | null
+): T[] {
+  if (!values.length) return [];
+  const [header, ...rows] = values;
+  const out: T[] = [];
+  for (const row of rows) {
+    if (!row.some((c) => String(c).trim().length)) continue;
+    const o: Record<string, string> = {};
+    header.forEach((h, i) => {
+      o[h.trim().toLowerCase()] = row[i] ?? '';
+    });
+    const mapped = mapRow(o);
+    if (mapped?.id) out.push(mapped);
+  }
+  return out;
 }
 
 export async function pullFromSheets(): Promise<boolean> {
@@ -95,113 +349,187 @@ export async function pullFromSheets(): Promise<boolean> {
 
   const all = await batchReadSheets(access.token, access.spreadsheetId);
 
-  for (const sheet of SHEET_NAMES) {
-    const values = all[sheet] ?? [];
-    if (sheet === 'settings') {
-      const rows = parseSheetRows(sheet, values) as Array<{ key: string; value: string }>;
-      for (const row of rows) {
-        if (row.key) await setSetting(row.key, row.value);
-      }
-      continue;
-    }
+  // 1) Usuarios
+  const usuarioRows = parseUsuarioRows(all.Usuarios ?? []);
+  if (usuarioRows.length > 0) {
+    const users: AppUser[] = usuarioRows.map((r) => ({
+      id: r.id || createId(),
+      name: r.nombre || 'User',
+      email: r.email,
+      avatar_url: '',
+      role: r.rol || 'member',
+      updated_at: nowIso(),
+    }));
+    await replaceSheetRows('users', users, upsertUser);
+  }
 
-    const rows = parseSheetRows(sheet, values);
-    if (rows.length === 0 && (sheet === 'users' || sheet === 'categories')) {
-      continue;
-    }
+  // 2) Categorías
+  const catRows = parseCategoriaRows(all.Categorias ?? []);
+  if (catRows.length > 0) {
+    const cats: Category[] = catRows.map((r) => ({
+      id: r.id || createId(),
+      name: r.nombre || 'Category',
+      type: asCategoryType(r.tipo),
+      icon: r.icono || 'tag',
+      color: r.color || '#8B7CFF',
+      is_system: false,
+      updated_at: nowIso(),
+    }));
+    await replaceSheetRows('categories', cats, upsertCategory);
+  }
 
-    switch (sheet) {
-      case 'users':
-        await replaceSheetRows('users', rows as AppUser[], upsertUser);
-        break;
-      case 'categories':
-        await replaceSheetRows('categories', rows as Category[], upsertCategory);
-        break;
-      case 'fixed_items':
-        await replaceSheetRows('fixed_items', rows as FixedItem[], upsertFixedItem);
-        break;
-      case 'transactions':
-        await replaceSheetRows('transactions', rows as Transaction[], upsertTransaction);
-        break;
-      case 'receipts':
-        await replaceSheetRows('receipts', rows as Receipt[], upsertReceipt);
-        break;
-      case 'receipt_items':
-        await replaceSheetRows('receipt_items', rows as ReceiptItem[], upsertReceiptItem);
-        break;
-      case 'savings_goals':
-        await replaceSheetRows('savings_goals', rows as SavingsGoal[], upsertSavingsGoal);
-        break;
-      case 'savings_sims':
-        await replaceSheetRows('savings_sims', rows as SavingsSim[], upsertSavingsSim);
-        break;
-      case 'notifications':
-        await replaceSheetRows('notifications', rows as AppNotification[], upsertNotification);
-        break;
-      case 'product_stats':
-        await replaceSheetRows('product_stats', rows as ProductStat[], upsertProductStat);
-        break;
+  let users = await listUsers();
+  let categories = await listCategories();
+
+  // 3) Gastos fijos
+  const fijoRows = parseGastoFijoRows(all.Gastos_fijos ?? []);
+  if (fijoRows.length > 0) {
+    const items: FixedItem[] = [];
+    for (const r of fijoRows) {
+      items.push({
+        id: r.id || createId(),
+        user_id: await resolveUserId(r.quien, users),
+        category_id: await resolveCategoryId(r.categoria, r.direccion, categories),
+        name: r.nombre || 'Fixed',
+        amount_aud: r.monto,
+        period: parsePeriod(r.periodo),
+        direction: parseDirection(r.direccion),
+        auto_debit: r.debito_auto,
+        notify_days_before: r.avisar_dias,
+        active: r.activo,
+        next_due: r.proximo_pago,
+        updated_at: nowIso(),
+      });
+    }
+    await replaceSheetRows('fixed_items', items, upsertFixedItem);
+  }
+
+  users = await listUsers();
+  categories = await listCategories();
+
+  // 4) Compras → transactions
+  const compras = parseCompraRows(all.Compras ?? []);
+  if (compras.length > 0) {
+    const txs: Transaction[] = [];
+    for (const row of compras) {
+      const date = row.fecha || nowIso().slice(0, 10);
+      const hora = (row.hora || '12:00').slice(0, 5);
+      txs.push({
+        id: row.id || createId(),
+        user_id: await resolveUserId(row.quien, users),
+        type: labelToTxType(row.tipo),
+        category_id: await resolveCategoryId(row.categoria, row.tipo, categories),
+        amount_aud: row.precio_total || row.precio_unidad * (row.unidades || 1),
+        date,
+        note: row.tipo,
+        merchant: row.tipo,
+        receipt_id: '',
+        created_at: `${date}T${hora}:00`,
+        updated_at: nowIso(),
+      });
+    }
+    await replaceSheetRows('transactions', txs, upsertTransaction);
+  }
+
+  // 5) Ahorros
+  const ahorros = parseAhorroRows(all.Ahorros ?? []);
+  if (ahorros.length > 0) {
+    const goals: SavingsGoal[] = [];
+    for (const row of ahorros) {
+      goals.push({
+        id: row.id || createId(),
+        name: row.nombre || 'Goal',
+        target_aud: row.meta,
+        current_aud: row.actual,
+        deadline: row.fecha_limite,
+        user_id: await resolveUserId(row.quien, users),
+        updated_at: row.actualizado || nowIso(),
+      });
+    }
+    await replaceSheetRows('savings_goals', goals, upsertSavingsGoal);
+  }
+
+  // 6) System sheets
+  const recibos = parseSysTable(all._sys_recibos ?? [], (o) => ({
+    id: o.id,
+    user_id: o.user_id,
+    store: o.store,
+    total_aud: Number(o.total_aud) || 0,
+    photo_uri_or_drive_id: o.photo_uri_or_drive_id,
+    purchased_at: o.purchased_at,
+    raw_gemini_json: o.raw_gemini_json,
+    updated_at: o.updated_at || nowIso(),
+  })) as Receipt[];
+  if (recibos.length) await replaceSheetRows('receipts', recibos, upsertReceipt);
+
+  const items = parseSysTable(all._sys_items_recibo ?? [], (o) => ({
+    id: o.id,
+    receipt_id: o.receipt_id,
+    name: o.name,
+    qty: Number(o.qty) || 0,
+    unit_price_aud: Number(o.unit_price_aud) || 0,
+    line_total_aud: Number(o.line_total_aud) || 0,
+    category_guess: o.category_guess,
+    updated_at: o.updated_at || nowIso(),
+  })) as ReceiptItem[];
+  if (items.length) await replaceSheetRows('receipt_items', items, upsertReceiptItem);
+
+  const avisos = parseSysTable(all._sys_avisos ?? [], (o) => ({
+    id: o.id,
+    user_id: o.user_id,
+    title: o.title,
+    body: o.body,
+    due_at: o.due_at,
+    related_fixed_id: o.related_fixed_id,
+    status: (o.status === 'sent' || o.status === 'read' ? o.status : 'pending') as AppNotification['status'],
+    updated_at: o.updated_at || nowIso(),
+  })) as AppNotification[];
+  if (avisos.length) await replaceSheetRows('notifications', avisos, upsertNotification);
+
+  const mercado = parseSysTable(all._sys_mercado ?? [], (o) => ({
+    id: o.id,
+    product_name_normalized: o.product_name_normalized,
+    avg_price: Number(o.avg_price) || 0,
+    buy_frequency_days: Number(o.buy_frequency_days) || 0,
+    last_seen: o.last_seen,
+    purchase_count: Number(o.purchase_count) || 0,
+    updated_at: o.updated_at || nowIso(),
+  })) as ProductStat[];
+  if (mercado.length) await replaceSheetRows('product_stats', mercado, upsertProductStat);
+
+  const configVals = all._sys_config ?? [];
+  if (configVals.length > 1) {
+    const [header, ...rows] = configVals;
+    for (const row of rows) {
+      const o: Record<string, string> = {};
+      header.forEach((h, i) => {
+        o[h.trim().toLowerCase()] = row[i] ?? '';
+      });
+      const key = o.clave || o.key;
+      const value = o.valor || o.value;
+      if (key) await setSetting(key, value);
     }
   }
 
   await setSetting('last_sync_at', nowIso());
   return true;
-}
-
-async function snapshotSheet(sheet: SheetName): Promise<Array<Record<string, unknown>>> {
-  switch (sheet) {
-    case 'users':
-      return listUsers() as unknown as Array<Record<string, unknown>>;
-    case 'categories':
-      return listCategories() as unknown as Array<Record<string, unknown>>;
-    case 'fixed_items':
-      return listFixedItems() as unknown as Array<Record<string, unknown>>;
-    case 'transactions':
-      return listTransactions() as unknown as Array<Record<string, unknown>>;
-    case 'receipts':
-      return listReceipts() as unknown as Array<Record<string, unknown>>;
-    case 'receipt_items':
-      return listReceiptItems() as unknown as Array<Record<string, unknown>>;
-    case 'savings_goals':
-      return listSavingsGoals() as unknown as Array<Record<string, unknown>>;
-    case 'notifications':
-      return listNotifications() as unknown as Array<Record<string, unknown>>;
-    case 'product_stats':
-      return listProductStats() as unknown as Array<Record<string, unknown>>;
-    case 'settings': {
-      const keys = ['currency', 'week_starts', 'sync_interval_sec', 'active_user_id', 'gemini_model'];
-      const out: Array<{ key: string; value: string }> = [];
-      for (const key of keys) {
-        const value = await getSetting(key);
-        if (value != null) out.push({ key, value });
-      }
-      return out;
-    }
-    default:
-      return [];
-  }
 }
 
 export async function pushFullSnapshot(): Promise<boolean> {
   const access = await getAccess();
   if (!access) return false;
 
-  const payload: Array<{ sheet: SheetName; rows: string[][] }> = [];
-  for (const sheet of SHEET_NAMES) {
-    if (sheet === 'savings_sims') continue;
-    const rows = await snapshotSheet(sheet);
-    payload.push({ sheet, rows: serializeRows(sheet, rows) });
-  }
-
+  await ensureWorkbookStructure(access.token, access.spreadsheetId);
+  const payload = await buildSnapshots();
   await batchWriteAllSheets(access.token, access.spreadsheetId, payload);
   await setSetting('last_sync_at', nowIso());
   return true;
 }
 
-export async function queueMutation(sheet: SheetName, payload: unknown): Promise<void> {
+export async function queueMutation(entity: string, payload: unknown): Promise<void> {
   await enqueueOutbox({
     id: createId(),
-    sheet,
+    sheet: entity,
     operation: 'upsert',
     payload_json: JSON.stringify(payload),
     created_at: nowIso(),
@@ -227,11 +555,6 @@ export async function flushOutbox(): Promise<void> {
   }
 }
 
-/**
- * @param opts.force - ignore throttle (manual Sync now)
- * @param opts.push - push local → Sheets when outbox has changes (or force)
- * @param opts.pull - pull Sheets → local
- */
 export async function syncNow(opts?: {
   force?: boolean;
   push?: boolean;
@@ -246,7 +569,11 @@ export async function syncNow(opts?: {
   const run = (async () => {
     const access = await getAccess();
     if (!access) {
-      return { ok: true, mode: 'local' as const, message: 'Local mode — connect Google to sync Sheets.' };
+      return {
+        ok: true,
+        mode: 'local' as const,
+        message: 'Local mode — paste your Sheet URL in Settings to sync.',
+      };
     }
 
     const now = Date.now();
@@ -279,7 +606,7 @@ export async function syncNow(opts?: {
         ok: true,
         mode: 'sheets' as const,
         message: shouldPush
-          ? 'Uploaded to Google Sheets and refreshed.'
+          ? 'Synced editable sheets + system backup to Google Sheets.'
           : 'Refreshed from Google Sheets.',
       };
     } catch (e) {

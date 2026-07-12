@@ -213,6 +213,32 @@ export async function listCategories(): Promise<Category[]> {
   }));
 }
 
+export async function deleteCategory(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
+}
+
+/** Wipe synced finance tables (keeps settings keys except spreadsheet_id cleared by caller). */
+export async function clearFinanceData(): Promise<void> {
+  const db = await getDb();
+  const tables = [
+    'transactions',
+    'receipt_items',
+    'receipts',
+    'savings_goals',
+    'savings_sims',
+    'fixed_items',
+    'notifications',
+    'product_stats',
+    'outbox',
+    'categories',
+    'users',
+  ];
+  for (const table of tables) {
+    await db.runAsync(`DELETE FROM ${table}`);
+  }
+}
+
 export async function upsertFixedItem(item: FixedItem): Promise<void> {
   const db = await getDb();
   await db.runAsync(

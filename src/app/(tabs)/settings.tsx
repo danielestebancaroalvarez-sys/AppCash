@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
+import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import {
@@ -21,11 +19,15 @@ import {
   setReceiptProvider,
   type ReceiptAiProvider,
 } from '@/lib/ai/receipts';
-import { ensureSpreadsheet, pushFullSnapshot, syncNow } from '@/lib/sync/engine';
-import { exportTransactionsExcel, importTransactionsFromExcelBase64 } from '@/lib/excel/io';
+import {
+  createAndLinkSpreadsheet,
+  getSpreadsheetOpenUrl,
+  linkSpreadsheetFromInput,
+  unlinkSpreadsheetAndWipeLocal,
+} from '@/lib/sync/engine';
 import { recomputeProductStats } from '@/lib/insights/market';
 import { scheduleFixedItemReminders } from '@/lib/notifications/schedule';
-import { saveGoogleSession, loadGoogleSession } from '@/lib/google/auth';
+import { loadGoogleSession } from '@/lib/google/auth';
 
 const PROVIDERS: Array<{ id: ReceiptAiProvider; label: string; hint: string }> = [
   {
@@ -53,13 +55,17 @@ export default function SettingsScreen() {
   const refresh = useFinanceStore((s) => s.refresh);
   const runSync = useFinanceStore((s) => s.runSync);
   const setSession = useFinanceStore((s) => s.setSession);
+  const { alert, confirm, Dialog } = useAppDialog();
+
   const [provider, setProvider] = useState<ReceiptAiProvider>('openrouter');
   const [openrouter, setOpenrouter] = useState('');
   const [deepseek, setDeepseek] = useState('');
   const [gemini, setGemini] = useState('');
   const [ocrSpace, setOcrSpace] = useState('');
-  const [sheetId, setSheetId] = useState(session?.spreadsheetId ?? '');
+  const [sheetInput, setSheetInput] = useState(session?.spreadsheetId ?? '');
   const [busy, setBusy] = useState(false);
+
+  const hasSheet = Boolean(session?.spreadsheetId);
 
   useEffect(() => {
     void (async () => {
@@ -72,20 +78,28 @@ export default function SettingsScreen() {
     })();
   }, []);
 
+  useEffect(() => {
+    setSheetInput(session?.spreadsheetId ?? '');
+  }, [session?.spreadsheetId]);
+
   const saveAi = async () => {
     await setReceiptProvider(provider);
     await setOpenRouterApiKey(openrouter);
     await setDeepSeekApiKey(deepseek);
     await setGeminiApiKey(gemini);
     if (ocrSpace.trim()) await setOcrSpaceApiKey(ocrSpace);
-    Alert.alert('Saved', `Receipt AI provider: ${provider}`);
+    alert('Saved', `Receipt AI provider: ${provider}`);
   };
 
   const onSync = async () => {
+    if (!hasSheet) {
+      alert('No sheet linked', 'Paste your Google Sheet URL below, or create one.');
+      return;
+    }
     setBusy(true);
     try {
       await runSync();
-      Alert.alert('Sync', useFinanceStore.getState().syncMessage || 'Done');
+      alert('Sync', useFinanceStore.getState().syncMessage || 'Done');
     } finally {
       setBusy(false);
     }
@@ -93,65 +107,75 @@ export default function SettingsScreen() {
 
   const createSheet = async () => {
     if (!session?.accessToken) {
-      Alert.alert('Google required', 'Sign in with Google from Profile / Login.');
+      alert('Google required', 'Sign in with Google from Profile / Login.');
       return;
     }
     setBusy(true);
     try {
-      const id = await ensureSpreadsheet();
+      const id = await createAndLinkSpreadsheet();
       if (id) {
-        setSheetId(id);
+        setSheetInput(id);
         const s = await loadGoogleSession();
-        if (s) setSession({ ...s, spreadsheetId: id });
-        await pushFullSnapshot();
+        if (s) setSession(s);
         await refresh();
-        Alert.alert('Sheet ready', `Spreadsheet ID:\n${id}`);
+        alert('Sheet ready', 'Created editable tabs (Usuarios, Categorias, Gastos_fijos, Compras, Ahorros) plus _sys_ backups.');
       }
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+      alert('Error', e instanceof Error ? e.message : 'Failed');
     } finally {
       setBusy(false);
     }
   };
 
   const linkSheet = async () => {
-    if (!session || !sheetId.trim()) return;
-    const next = { ...session, spreadsheetId: sheetId.trim() };
-    await saveGoogleSession(next);
-    setSession(next);
-    const result = await syncNow({ force: true, push: true, pull: true });
-    await refresh();
-    Alert.alert('Linked', result.message);
-  };
-
-  const onExport = async () => {
-    const path = await exportTransactionsExcel();
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(path, {
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        dialogTitle: 'Export AppCash',
-      });
-    } else {
-      Alert.alert('Exported', path);
+    if (!session) {
+      alert('Google required', 'Sign in with Google first.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await linkSpreadsheetFromInput(sheetInput);
+      if (result.spreadsheetId) {
+        const s = await loadGoogleSession();
+        if (s) setSession(s);
+        setSheetInput(result.spreadsheetId);
+      }
+      await refresh();
+      alert(result.ok ? 'Linked' : 'Could not link', result.message);
+    } finally {
+      setBusy(false);
     }
   };
 
-  const onImport = async () => {
-    const file = await DocumentPicker.getDocumentAsync({
-      type: [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-excel',
-        'text/csv',
-      ],
-      copyToCacheDirectory: true,
-    });
-    if (file.canceled || !file.assets?.[0]) return;
-    const b64 = await FileSystem.readAsStringAsync(file.assets[0].uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const count = await importTransactionsFromExcelBase64(b64);
-    await refresh();
-    Alert.alert('Import complete', `${count} transactions imported.`);
+  const openSheet = async () => {
+    if (!session?.spreadsheetId) return;
+    const url = getSpreadsheetOpenUrl(session.spreadsheetId);
+    const can = await Linking.canOpenURL(url);
+    if (can) await Linking.openURL(url);
+    else alert('Open failed', url);
+  };
+
+  const removeSheet = () => {
+    confirm(
+      'Remove linked sheet?',
+      'This unlinks Google Sheets and deletes ALL local data on this phone (transactions, savings, receipts…). Your Google file itself is not deleted. Defaults will be restored.',
+      async () => {
+        setBusy(true);
+        try {
+          await unlinkSpreadsheetAndWipeLocal();
+          const s = await loadGoogleSession();
+          setSession(s);
+          setSheetInput('');
+          await refresh();
+          alert('Unlinked', 'Sheet unlinked and local data cleared.');
+        } catch (e) {
+          alert('Error', e instanceof Error ? e.message : 'Failed');
+        } finally {
+          setBusy(false);
+        }
+      },
+      { confirmLabel: 'Delete all data', tone: 'danger', cancelLabel: 'Keep' }
+    );
   };
 
   const onInsights = async () => {
@@ -163,7 +187,7 @@ export default function SettingsScreen() {
   const onNotify = async () => {
     const n = await scheduleFixedItemReminders();
     await refresh();
-    Alert.alert('Reminders', `Scheduled ${n} manual payment reminders.`);
+    alert('Reminders', `Scheduled ${n} manual payment reminders.`);
   };
 
   return (
@@ -174,20 +198,52 @@ export default function SettingsScreen() {
         {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : 'never'}
       </Text>
 
-      <SectionTitle title="Google Sheets" subtitle="Source of truth for household data" />
+      <SectionTitle
+        title="Google Sheets"
+        subtitle="Edit freely: Usuarios, Categorias, Gastos_fijos, Compras, Ahorros. Tabs starting with _sys_ are app backups — leave them alone."
+      />
       <GlassPanel style={{ gap: Spacing.sm }}>
-        <Text style={styles.meta}>{syncMessage || 'Pull / push every ~45s while open.'}</Text>
+        <Text style={styles.meta}>
+          {syncMessage ||
+            (hasSheet
+              ? 'Sheet linked — Sync updates your editable tabs and system backups.'
+              : 'Paste the full Sheet URL to link, or create a new one.')}
+        </Text>
         <TextInput
-          value={sheetId}
-          onChangeText={setSheetId}
-          placeholder="Spreadsheet ID"
+          value={sheetInput}
+          onChangeText={setSheetInput}
+          placeholder="https://docs.google.com/spreadsheets/d/…"
           placeholderTextColor={Palette.textDim}
           style={styles.input}
           autoCapitalize="none"
+          autoCorrect={false}
         />
-        <PrimaryButton label={busy ? 'Working…' : 'Sync now'} onPress={onSync} disabled={busy} />
-        <PrimaryButton label="Create AppCash spreadsheet" onPress={createSheet} variant="ghost" />
-        <PrimaryButton label="Link spreadsheet ID" onPress={linkSheet} variant="ghost" />
+        <PrimaryButton
+          label={busy ? 'Working…' : hasSheet ? 'Sync now' : 'Link spreadsheet'}
+          onPress={hasSheet ? onSync : linkSheet}
+          disabled={busy}
+        />
+        {hasSheet ? (
+          <>
+            <PrimaryButton label="Open in Google Sheets" onPress={openSheet} variant="ghost" />
+            <PrimaryButton label="Update link from URL" onPress={linkSheet} variant="ghost" />
+            <PrimaryButton
+              label="Remove sheet & wipe data"
+              onPress={removeSheet}
+              variant="ghost"
+            />
+          </>
+        ) : (
+          <>
+            <PrimaryButton label="Link from URL" onPress={linkSheet} variant="ghost" disabled={busy} />
+            <PrimaryButton
+              label="Create AppCash spreadsheet"
+              onPress={createSheet}
+              variant="ghost"
+              disabled={busy}
+            />
+          </>
+        )}
       </GlassPanel>
 
       <SectionTitle title="Fixed & categories" />
@@ -206,7 +262,7 @@ export default function SettingsScreen() {
 
       <SectionTitle title="Market prediction" />
       <GlassPanel>
-        <PrimaryButton label="Recompute & open insights" onPress={onInsights} />
+        <PrimaryButton label="Open market insights" onPress={onInsights} />
       </GlassPanel>
 
       <SectionTitle
@@ -276,13 +332,8 @@ export default function SettingsScreen() {
         <PrimaryButton label="Save receipt AI settings" onPress={saveAi} />
       </GlassPanel>
 
-      <SectionTitle title="Excel bridge" />
-      <GlassPanel style={{ gap: Spacing.sm }}>
-        <PrimaryButton label="Import Excel / CSV" onPress={onImport} />
-        <PrimaryButton label="Export Excel" onPress={onExport} variant="ghost" />
-      </GlassPanel>
-
       <View style={{ height: Spacing.lg }} />
+      {Dialog}
     </Screen>
   );
 }

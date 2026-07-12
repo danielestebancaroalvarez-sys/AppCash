@@ -1,8 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Image, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
+import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Palette, Radii, Spacing } from '@/constants/theme';
 import type { ParsedReceipt } from '@/types/models';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -24,6 +25,7 @@ export default function ReceiptReviewScreen() {
   const categories = useFinanceStore((s) => s.categories);
   const activeUserId = useFinanceStore((s) => s.activeUserId);
   const refresh = useFinanceStore((s) => s.refresh);
+  const { alert, Dialog } = useAppDialog();
 
   const initial = useMemo<ParsedReceipt>(() => {
     try {
@@ -43,10 +45,10 @@ export default function ReceiptReviewScreen() {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
   };
 
-  const confirm = async () => {
+  const saveReceipt = async () => {
     const grocery = categories.find((c) => c.name.toLowerCase() === 'groceries') ?? categories[0];
     if (!grocery || !userId) {
-      Alert.alert('Missing category/user');
+      alert('Missing category/user', 'Create a Groceries category and pick who paid.');
       return;
     }
     const receiptId = createId();
@@ -95,7 +97,7 @@ export default function ReceiptReviewScreen() {
     await queueMutation('transactions', tx);
     await recomputeProductStats();
     await refresh();
-    Alert.alert('Saved', 'Receipt and line items stored.');
+    alert('Saved', 'Receipt and line items stored.');
     router.back();
   };
 
@@ -151,8 +153,9 @@ export default function ReceiptReviewScreen() {
         </GlassPanel>
       ))}
 
-      <PrimaryButton label="Confirm & save" onPress={confirm} />
+      <PrimaryButton label="Confirm & save" onPress={saveReceipt} />
       <View style={{ height: 24 }} />
+      {Dialog}
     </Screen>
   );
 }

@@ -1,7 +1,8 @@
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
+import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { formatAud } from '@/lib/money';
@@ -14,6 +15,7 @@ export default function FixedListScreen() {
   const users = useFinanceStore((s) => s.users);
   const categories = useFinanceStore((s) => s.categories);
   const refresh = useFinanceStore((s) => s.refresh);
+  const { confirm, Dialog } = useAppDialog();
 
   const remove = async (id: string) => {
     await deleteFixedItem(id);
@@ -30,7 +32,11 @@ export default function FixedListScreen() {
         const cat = categories.find((c) => c.id === item.category_id);
         return (
           <GlassPanel key={item.id} style={styles.row}>
-            <Pressable style={{ flex: 1 }} onPress={() => router.push({ pathname: '/fixed/edit' as never, params: { id: item.id } })}>
+            <Pressable
+              style={{ flex: 1 }}
+              onPress={() =>
+                router.push({ pathname: '/fixed/edit' as never, params: { id: item.id } })
+              }>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>
                 {item.direction === 'in' ? 'Income' : 'Expense'} · {item.period} ·{' '}
@@ -41,16 +47,18 @@ export default function FixedListScreen() {
               </Text>
             </Pressable>
             <View style={{ alignItems: 'flex-end', gap: 8 }}>
-              <Text style={[styles.amt, { color: item.direction === 'in' ? Palette.teal : Palette.coral }]}>
+              <Text
+                style={[
+                  styles.amt,
+                  { color: item.direction === 'in' ? Palette.teal : Palette.coral },
+                ]}>
                 {formatAud(item.amount_aud)}
               </Text>
               <Text
                 style={styles.delete}
                 onPress={() =>
-                  Alert.alert('Delete?', item.name, [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Delete', style: 'destructive', onPress: () => remove(item.id) },
-                  ])
+                  confirm(`Delete ${item.name}?`, 'This fixed item will be removed.', () =>
+                    remove(item.id), { confirmLabel: 'Delete', tone: 'danger' })
                 }>
                 Delete
               </Text>
@@ -58,6 +66,7 @@ export default function FixedListScreen() {
           </GlassPanel>
         );
       })}
+      {Dialog}
     </Screen>
   );
 }

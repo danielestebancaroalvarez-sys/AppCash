@@ -1,8 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
+import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { createId } from '@/lib/id';
@@ -21,6 +22,7 @@ export default function FixedEditScreen() {
   const categories = useFinanceStore((s) => s.categories);
   const activeUserId = useFinanceStore((s) => s.activeUserId);
   const refresh = useFinanceStore((s) => s.refresh);
+  const { alert, Dialog } = useAppDialog();
 
   const existing = fixedItems.find((f) => f.id === id);
   const [name, setName] = useState(existing?.name ?? '');
@@ -44,7 +46,7 @@ export default function FixedEditScreen() {
   const save = async () => {
     const value = parseAmount(amount);
     if (!name.trim() || !value || !userId || !categoryId) {
-      Alert.alert('Missing fields');
+      alert('Missing fields', 'Fill name, amount, who, and category.');
       return;
     }
     const item = {
@@ -125,6 +127,7 @@ export default function FixedEditScreen() {
 
         <PrimaryButton label="Save" onPress={save} />
       </GlassPanel>
+      {Dialog}
     </Screen>
   );
 }

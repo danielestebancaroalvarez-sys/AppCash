@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '@/components/ui/Screen';
 import { AppCashLogo } from '@/components/brand/AppCashLogo';
 import { GoogleGlyph } from '@/components/brand/GoogleGlyph';
+import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import {
   isGoogleConfigured,
@@ -25,10 +25,11 @@ export default function LoginScreen() {
   const setSession = useFinanceStore((s) => s.setSession);
   const refresh = useFinanceStore((s) => s.refresh);
   const [busy, setBusy] = useState(false);
+  const { alert, Dialog } = useAppDialog();
 
   const onGoogle = async () => {
     if (!isGoogleConfigured()) {
-      Alert.alert(
+      alert(
         'Setup needed',
         'Google Sign-In is not configured yet. Check your .env Client IDs and rebuild the Android app.'
       );
@@ -40,7 +41,7 @@ export default function LoginScreen() {
       const result = await signInWithGoogleNative();
       if (!result.ok) {
         if (!result.cancelled) {
-          Alert.alert('Could not sign in', result.message);
+          alert('Could not sign in', result.message);
         }
         return;
       }
@@ -61,7 +62,7 @@ export default function LoginScreen() {
       setSession(session);
       await refresh();
     } catch (e) {
-      Alert.alert('Sign-in failed', e instanceof Error ? e.message : 'Unknown error');
+      alert('Sign-in failed', e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setBusy(false);
     }
@@ -107,6 +108,7 @@ export default function LoginScreen() {
       </View>
 
       <Text style={styles.footer}>Australian dollars · Week starts Monday</Text>
+      {Dialog}
     </Screen>
   );
 }

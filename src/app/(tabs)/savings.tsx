@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/ui/Screen';
 import { AmountText, GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
+import { useAppDialog } from '@/components/ui/useAppDialog';
 import { ProgressRing } from '@/components/charts/FinanceCharts';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -17,6 +18,7 @@ export default function SavingsScreen() {
   const users = useFinanceStore((s) => s.users);
   const categories = useFinanceStore((s) => s.categories);
   const refresh = useFinanceStore((s) => s.refresh);
+  const { alert, Dialog } = useAppDialog();
   const [name, setName] = useState('');
   const [target, setTarget] = useState('');
   const [weekly, setWeekly] = useState('100');
@@ -64,7 +66,7 @@ export default function SavingsScreen() {
       updated_at: nowIso(),
     };
     await upsertSavingsSim(row);
-    Alert.alert('Simulation', `At ${formatAud(sim.w)}/week you reach the goal in ~${sim.weeks} weeks.`);
+    alert('Simulation', `At ${formatAud(sim.w)}/week you reach the goal in ~${sim.weeks} weeks.`);
   };
 
   const addContribution = async () => {
@@ -177,6 +179,7 @@ export default function SavingsScreen() {
         />
         <PrimaryButton label="Create goal" onPress={createGoal} variant="ghost" />
       </GlassPanel>
+      {Dialog}
     </Screen>
   );
 }

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Image,
   Pressable,
   StyleSheet,
@@ -12,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
+import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { createId } from '@/lib/id';
@@ -29,6 +29,7 @@ export default function AddScreen() {
   const activeUserId = useFinanceStore((s) => s.activeUserId);
   const session = useFinanceStore((s) => s.session);
   const refresh = useFinanceStore((s) => s.refresh);
+  const { alert, confirm, Dialog } = useAppDialog();
   const [mode, setMode] = useState<'expense' | 'income' | 'receipt'>('expense');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -64,21 +65,23 @@ export default function AddScreen() {
   const saveQuick = async () => {
     const value = parseAmount(amount);
     if (!value) {
-      Alert.alert('Missing amount', 'Enter an amount in AUD.');
+      alert('Missing amount', 'Enter an amount in AUD.');
       return;
     }
     if (!effectiveUser) {
-      Alert.alert(
+      alert(
         'No profile',
         'No household profiles found. Open Profile and stay signed in, or pull to refresh.'
       );
       return;
     }
     if (!effectiveCategory) {
-      Alert.alert('No category', 'Create a category in Settings → Categories, then try again.', [
-        { text: 'Open categories', onPress: () => router.push('/categories' as never) },
-        { text: 'OK' },
-      ]);
+      confirm(
+        'No category',
+        'Create a category in Settings → Categories, then try again.',
+        () => router.push('/categories' as never),
+        { confirmLabel: 'Open categories', cancelLabel: 'OK' }
+      );
       return;
     }
 
@@ -102,7 +105,7 @@ export default function AddScreen() {
     setAmount('');
     setNote('');
     setMerchant('');
-    Alert.alert('Saved', `${mode === 'income' ? 'Income' : 'Expense'} of $${value.toFixed(2)} AUD added.`);
+    alert('Saved', `${mode === 'income' ? 'Income' : 'Expense'} of $${value.toFixed(2)} AUD added.`);
   };
 
   const scanReceipt = async (fromCamera: boolean) => {
@@ -112,7 +115,7 @@ export default function AddScreen() {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permission needed', 'Allow camera/photos to scan receipts.');
+        alert('Permission needed', 'Allow camera/photos to scan receipts.');
         return;
       }
       const result = fromCamera
@@ -125,28 +128,23 @@ export default function AddScreen() {
       try {
         parsed = await parseReceiptImage(uri);
       } catch (e) {
-        Alert.alert(
+        confirm(
           'Receipt scan',
           e instanceof Error ? e.message : 'Could not parse receipt',
-          [
-            {
-              text: 'Enter manually',
-              onPress: () =>
-                router.push({
-                  pathname: '/receipt/review' as never,
-                  params: {
-                    photoUri: uri,
-                    draft: JSON.stringify({
-                      store: merchant || 'Supermarket',
-                      purchased_at: todayIsoDate(),
-                      total_aud: 0,
-                      items: [],
-                    }),
-                  },
+          () =>
+            router.push({
+              pathname: '/receipt/review' as never,
+              params: {
+                photoUri: uri,
+                draft: JSON.stringify({
+                  store: merchant || 'Supermarket',
+                  purchased_at: todayIsoDate(),
+                  total_aud: 0,
+                  items: [],
                 }),
-            },
-            { text: 'OK' },
-          ]
+              },
+            }),
+          { confirmLabel: 'Enter manually', cancelLabel: 'OK' }
         );
         return;
       }
@@ -292,6 +290,7 @@ export default function AddScreen() {
           />
         </GlassPanel>
       )}
+      {Dialog}
     </Screen>
   );
 }
