@@ -1,17 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
-import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
+import { PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
+import { categoryIonicon } from '@/constants/category-icons';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { createId } from '@/lib/id';
@@ -22,6 +17,38 @@ import { queueMutation } from '@/lib/sync/engine';
 import { parseReceiptImage } from '@/lib/ai/receipts';
 import type { TransactionType } from '@/types/models';
 
+type AddMode = 'expense' | 'income' | 'receipt';
+
+const MODES: Array<{
+  id: AddMode;
+  label: string;
+  hint: string;
+  ion: keyof typeof Ionicons.glyphMap;
+  color: string;
+}> = [
+  {
+    id: 'expense',
+    label: 'Expense',
+    hint: 'Money out',
+    ion: 'arrow-down-circle-outline',
+    color: Palette.coral,
+  },
+  {
+    id: 'income',
+    label: 'Income',
+    hint: 'Money in',
+    ion: 'arrow-up-circle-outline',
+    color: Palette.teal,
+  },
+  {
+    id: 'receipt',
+    label: 'Receipt',
+    hint: 'Scan AI',
+    ion: 'scan-outline',
+    color: '#5B8CFF',
+  },
+];
+
 export default function AddScreen() {
   const router = useRouter();
   const users = useFinanceStore((s) => s.users);
@@ -30,13 +57,15 @@ export default function AddScreen() {
   const session = useFinanceStore((s) => s.session);
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, confirm, Dialog } = useAppDialog();
-  const [mode, setMode] = useState<'expense' | 'income' | 'receipt'>('expense');
+  const [mode, setMode] = useState<AddMode>('expense');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [merchant, setMerchant] = useState('');
-  const [categoryId, setCategoryId] = useState<string>('');
-  const [userId, setUserId] = useState<string>('');
+  const [categoryId, setCategoryId] = useState('');
+  const [userId, setUserId] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const modeMeta = MODES.find((m) => m.id === mode)!;
 
   useEffect(() => {
     void refresh();
@@ -163,193 +192,478 @@ export default function AddScreen() {
 
   return (
     <Screen>
-      <Text style={styles.title}>Quick add</Text>
+      <View style={styles.header}>
+        <View style={[styles.heroIcon, { backgroundColor: `${modeMeta.color}22` }]}>
+          <Ionicons name={modeMeta.ion} size={28} color={modeMeta.color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kicker}>Capture</Text>
+          <Text style={styles.title}>
+            {mode === 'expense'
+              ? 'Add expense'
+              : mode === 'income'
+                ? 'Add income'
+                : 'Scan receipt'}
+          </Text>
+          <Text style={styles.sub}>
+            {mode === 'expense'
+              ? 'Log a one-off spend in AUD'
+              : mode === 'income'
+                ? 'Log sporadic income for the household'
+                : 'Photo → line items with AI'}
+          </Text>
+        </View>
+      </View>
+
       {session ? (
-        <Text style={styles.hint}>Signed in as {session.name}</Text>
+        <Text style={styles.signedIn}>Signed in as {session.name}</Text>
       ) : null}
 
       <View style={styles.modes}>
-        {(['expense', 'income', 'receipt'] as const).map((m) => (
-          <Pressable
-            key={m}
-            onPress={() => setMode(m)}
-            style={[styles.mode, mode === m && styles.modeOn]}>
-            <Text style={[styles.modeText, mode === m && styles.modeTextOn]}>
-              {m === 'expense' ? 'Expense' : m === 'income' ? 'Income' : 'Receipt scan'}
-            </Text>
-          </Pressable>
-        ))}
+        {MODES.map((m) => {
+          const on = mode === m.id;
+          return (
+            <Pressable
+              key={m.id}
+              onPress={() => setMode(m.id)}
+              style={[
+                styles.modeCard,
+                on && { borderColor: m.color, backgroundColor: `${m.color}18` },
+              ]}>
+              <View style={[styles.modeIcon, { backgroundColor: `${m.color}28` }]}>
+                <Ionicons name={m.ion} size={20} color={m.color} />
+              </View>
+              <Text style={[styles.modeLabel, on && { color: Palette.text }]}>{m.label}</Text>
+              <Text style={styles.modeHint}>{m.hint}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {mode !== 'receipt' ? (
-        <GlassPanel style={{ gap: Spacing.sm }}>
-          <Text style={styles.label}>Amount (AUD)</Text>
-          <TextInput
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-            placeholderTextColor={Palette.textDim}
-            style={styles.input}
-          />
-          <Text style={styles.label}>Merchant</Text>
-          <TextInput
-            value={merchant}
-            onChangeText={setMerchant}
-            placeholder="Woolworths, Aldi…"
-            placeholderTextColor={Palette.textDim}
-            style={styles.input}
-          />
-          <Text style={styles.label}>Note</Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="Optional"
-            placeholderTextColor={Palette.textDim}
-            style={styles.input}
-          />
+        <>
+          <Section
+            accent={modeMeta.color}
+            icon="cash-outline"
+            title="Amount"
+            hint="How much in Australian dollars?">
+            <TextInput
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor={Palette.textDim}
+              style={[styles.input, styles.amountInput]}
+            />
+          </Section>
 
-          <View style={styles.rowBetween}>
-            <Text style={styles.label}>Category</Text>
-            <Pressable onPress={() => router.push('/categories' as never)}>
-              <Text style={styles.link}>Manage</Text>
-            </Pressable>
-          </View>
-          {filteredCats.length === 0 ? (
-            <Pressable
-              onPress={() => router.push('/categories' as never)}
-              style={styles.emptyBox}>
-              <Text style={styles.emptyText}>
-                No {mode} categories yet. Tap to create one.
-              </Text>
-            </Pressable>
-          ) : (
-            <View style={styles.chips}>
-              {filteredCats.map((c) => {
-                const selected = effectiveCategory === c.id;
-                return (
-                  <Pressable
-                    key={c.id}
-                    onPress={() => setCategoryId(c.id)}
-                    style={[styles.chip, selected && { backgroundColor: c.color, borderColor: c.color }]}>
-                    <Text style={[styles.chipText, selected && { color: Palette.void, fontWeight: '700' }]}>
-                      {c.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
+          <Section
+            accent={Palette.amber}
+            icon="storefront-outline"
+            title="Where & note"
+            hint="Merchant and optional context">
+            <Text style={styles.fieldLabel}>Merchant / source</Text>
+            <TextInput
+              value={merchant}
+              onChangeText={setMerchant}
+              placeholder={mode === 'income' ? 'Employer, side hustle…' : 'Woolworths, Aldi…'}
+              placeholderTextColor={Palette.textDim}
+              style={styles.input}
+            />
+            <Text style={styles.fieldLabel}>Note</Text>
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder="Optional details"
+              placeholderTextColor={Palette.textDim}
+              style={styles.input}
+            />
+          </Section>
 
-          <Text style={styles.label}>Who</Text>
-          {users.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No profiles yet. Pull to refresh or reopen the app.</Text>
-            </View>
-          ) : (
-            <View style={styles.chips}>
-              {users.map((u) => {
-                const selected = effectiveUser === u.id;
-                return (
-                  <Pressable
-                    key={u.id}
-                    onPress={() => setUserId(u.id)}
-                    style={[styles.chip, selected && styles.chipOn]}>
-                    <Text style={[styles.chipText, selected && styles.chipTextOn]}>{u.name || 'User'}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
+          <Section
+            accent={Palette.violet}
+            icon="pricetags-outline"
+            title="Category"
+            hint={`Pick a ${mode} category`}
+            action={
+              <Pressable onPress={() => router.push('/categories' as never)}>
+                <Text style={[styles.link, { color: Palette.violet }]}>Manage</Text>
+              </Pressable>
+            }>
+            {filteredCats.length === 0 ? (
+              <Pressable
+                onPress={() => router.push('/categories' as never)}
+                style={styles.emptyBox}>
+                <Ionicons name="alert-circle-outline" size={18} color={Palette.amber} />
+                <Text style={styles.emptyText}>
+                  No {mode} categories yet. Tap to create one.
+                </Text>
+              </Pressable>
+            ) : (
+              <View style={styles.chips}>
+                {filteredCats.map((c) => {
+                  const selected = effectiveCategory === c.id;
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => setCategoryId(c.id)}
+                      style={[
+                        styles.catChip,
+                        selected && {
+                          backgroundColor: `${c.color}28`,
+                          borderColor: c.color,
+                        },
+                      ]}>
+                      <View style={[styles.catIcon, { backgroundColor: `${c.color}33` }]}>
+                        <Ionicons name={categoryIonicon(c.icon)} size={16} color={c.color} />
+                      </View>
+                      <Text
+                        style={[
+                          styles.catLabel,
+                          selected && { color: Palette.text, fontWeight: '700' },
+                        ]}>
+                        {c.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </Section>
 
-          <PrimaryButton
-            label={mode === 'income' ? 'Save income' : 'Save expense'}
+          <Section
+            accent={Palette.cyan}
+            icon="people-outline"
+            title="Who"
+            hint="Which household profile paid or received this?">
+            {users.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Ionicons name="person-outline" size={18} color={Palette.amber} />
+                <Text style={styles.emptyText}>
+                  No profiles yet. Pull to refresh or reopen the app.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.chips}>
+                {users.map((u) => {
+                  const selected = effectiveUser === u.id;
+                  return (
+                    <Pressable
+                      key={u.id}
+                      onPress={() => setUserId(u.id)}
+                      style={[
+                        styles.personChip,
+                        selected && {
+                          backgroundColor: 'rgba(61,231,255,0.18)',
+                          borderColor: Palette.cyan,
+                        },
+                      ]}>
+                      <View
+                        style={[
+                          styles.avatar,
+                          selected && { borderColor: Palette.cyan, backgroundColor: Palette.cyan },
+                        ]}>
+                        <Text
+                          style={[styles.avatarLetter, selected && { color: Palette.void }]}>
+                          {(u.name || 'U').slice(0, 1).toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.personName,
+                          selected && { color: Palette.text, fontWeight: '700' },
+                        ]}>
+                        {u.name || 'User'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </Section>
+
+          <Pressable
             onPress={saveQuick}
-          />
-        </GlassPanel>
+            style={({ pressed }) => [
+              styles.saveBtn,
+              { backgroundColor: modeMeta.color },
+              pressed && { opacity: 0.9 },
+            ]}>
+            <Ionicons
+              name={mode === 'income' ? 'checkmark-circle' : 'cart'}
+              size={20}
+              color={Palette.void}
+            />
+            <Text style={styles.saveLabel}>
+              {mode === 'income' ? 'Save income' : 'Save expense'}
+            </Text>
+          </Pressable>
+        </>
       ) : (
-        <GlassPanel glow style={{ gap: Spacing.md }}>
-          <Image
-            source={require('../../../assets/images/android-icon-foreground.png')}
-            style={styles.receiptArt}
-          />
-          <SectionTitle
-            title="Scan supermarket receipt"
-            subtitle="AI extracts line items from Woolworths / Aldi photos"
-          />
-          <PrimaryButton
-            label={busy ? 'Reading…' : 'Take photo'}
+        <Section
+          accent={modeMeta.color}
+          icon="receipt-outline"
+          title="Supermarket receipt"
+          hint="AI reads Woolworths / Aldi photos into line items">
+          <View style={styles.receiptHero}>
+            <View style={[styles.receiptBlob, { backgroundColor: `${modeMeta.color}22` }]}>
+              <Ionicons name="camera-outline" size={42} color={modeMeta.color} />
+            </View>
+            <Text style={styles.receiptCopy}>
+              Take a clear photo of the full receipt. Review totals before saving.
+            </Text>
+          </View>
+          <Pressable
+            disabled={busy}
             onPress={() => scanReceipt(true)}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              { backgroundColor: modeMeta.color },
+              (pressed || busy) && { opacity: 0.85 },
+            ]}>
+            <Ionicons name="camera" size={20} color={Palette.void} />
+            <Text style={styles.saveLabel}>{busy ? 'Reading…' : 'Take photo'}</Text>
+          </Pressable>
+          <Pressable
             disabled={busy}
-          />
-          <PrimaryButton
-            label="Choose from gallery"
-            variant="ghost"
             onPress={() => scanReceipt(false)}
-            disabled={busy}
-          />
-        </GlassPanel>
+            style={({ pressed }) => [
+              styles.ghostBtn,
+              { borderColor: modeMeta.color },
+              pressed && { opacity: 0.85 },
+            ]}>
+            <Ionicons name="images-outline" size={18} color={modeMeta.color} />
+            <Text style={[styles.ghostLabel, { color: modeMeta.color }]}>Choose from gallery</Text>
+          </Pressable>
+        </Section>
       )}
+
       {Dialog}
     </Screen>
   );
 }
 
+function Section({
+  title,
+  hint,
+  accent,
+  icon,
+  action,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  accent: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <View style={[styles.section, { borderColor: `${accent}55` }]}>
+      <View style={[styles.sectionBar, { backgroundColor: accent }]} />
+      <View style={styles.sectionBody}>
+        <View style={styles.sectionHead}>
+          <View style={[styles.sectionIcon, { backgroundColor: `${accent}22` }]}>
+            <Ionicons name={icon} size={16} color={accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.sectionTitle, { color: accent }]}>{title}</Text>
+            {hint ? <Text style={styles.sectionHint}>{hint}</Text> : null}
+          </View>
+          {action}
+        </View>
+        <View style={{ gap: Spacing.sm, marginTop: Spacing.sm }}>{children}</View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  heroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kicker: {
+    color: Palette.cyan,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
   title: {
     color: Palette.text,
     fontFamily: Fonts.display,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
-    marginBottom: 4,
   },
-  hint: { color: Palette.textDim, marginBottom: Spacing.md, fontSize: 12 },
+  sub: { color: Palette.textMuted, fontSize: 13, marginTop: 2 },
+  signedIn: { color: Palette.textDim, fontSize: 12, marginBottom: Spacing.md },
   modes: { flexDirection: 'row', gap: 8, marginBottom: Spacing.md },
-  mode: {
+  modeCard: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: Radii.pill,
+    borderRadius: Radii.lg,
     borderWidth: 1,
     borderColor: Palette.stroke,
-    alignItems: 'center',
     backgroundColor: Palette.panel,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 6,
   },
-  modeOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
-  modeText: { color: Palette.textMuted, fontSize: 12, fontWeight: '700' },
-  modeTextOn: { color: Palette.void },
-  label: { color: Palette.textMuted, fontSize: 12 },
-  link: { color: Palette.cyan, fontSize: 12, fontWeight: '700' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  modeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeLabel: {
+    color: Palette.textMuted,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  modeHint: { color: Palette.textDim, fontSize: 10 },
+  section: {
+    flexDirection: 'row',
+    backgroundColor: Palette.panel,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    overflow: 'hidden',
+  },
+  sectionBar: { width: 4 },
+  sectionBody: { flex: 1, padding: Spacing.md },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: { fontFamily: Fonts.display, fontWeight: '800', fontSize: 14 },
+  sectionHint: { color: Palette.textDim, fontSize: 11, marginTop: 1 },
+  fieldLabel: { color: Palette.textMuted, fontSize: 12 },
+  link: { fontSize: 12, fontWeight: '700' },
   input: {
     borderWidth: 1,
     borderColor: Palette.stroke,
     borderRadius: Radii.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     color: Palette.text,
     backgroundColor: Palette.panelElevated,
+    fontSize: 16,
+  },
+  amountInput: {
+    fontSize: 28,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    paddingVertical: 14,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  catChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: Radii.pill,
-    backgroundColor: Palette.panelElevated,
     borderWidth: 1,
     borderColor: Palette.stroke,
-    minWidth: 72,
-    alignItems: 'center',
+    backgroundColor: Palette.panelElevated,
   },
-  chipOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
-  chipText: { color: Palette.textMuted, fontSize: 13 },
-  chipTextOn: { color: Palette.void, fontWeight: '700' },
+  catIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catLabel: { color: Palette.textMuted, fontSize: 13 },
+  personChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    backgroundColor: Palette.panelElevated,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Palette.panel,
+  },
+  avatarLetter: { color: Palette.cyan, fontWeight: '800', fontSize: 12 },
+  personName: { color: Palette.textMuted, fontSize: 13 },
   emptyBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     borderWidth: 1,
     borderColor: Palette.stroke,
     borderRadius: Radii.md,
     padding: Spacing.md,
     backgroundColor: Palette.panelElevated,
   },
-  emptyText: { color: Palette.amber, fontSize: 13, lineHeight: 18 },
-  receiptArt: { width: '100%', height: 140, borderRadius: Radii.md, opacity: 0.9 },
+  emptyText: { color: Palette.amber, fontSize: 13, lineHeight: 18, flex: 1 },
+  saveBtn: {
+    height: 52,
+    borderRadius: Radii.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: Spacing.sm,
+  },
+  saveLabel: {
+    color: Palette.void,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  ghostBtn: {
+    height: 48,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  ghostLabel: { fontFamily: Fonts.display, fontWeight: '800', fontSize: 14 },
+  receiptHero: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
+  receiptBlob: {
+    width: 88,
+    height: 88,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  receiptCopy: {
+    color: Palette.textMuted,
+    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 19,
+    paddingHorizontal: Spacing.sm,
+  },
 });

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { AppModal } from '@/components/ui/AppModal';
+import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
 import { PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { SavingsSimWidget } from '@/components/savings/SavingsSimWidget';
@@ -29,6 +30,8 @@ export default function SavingsScreen() {
   const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
   const [contributeAmt, setContributeAmt] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const selectedSimGoalId = focusGoalId ?? goals[0]?.id ?? null;
 
   const addContribution = async () => {
     if (!contributeGoal) return;
@@ -133,7 +136,11 @@ export default function SavingsScreen() {
           ))}
 
           <Text style={styles.sectionLabel}>Simulation</Text>
-          <SavingsSimWidget goals={goals} preferredGoalId={focusGoalId} />
+          <SavingsSimWidget
+            goals={goals}
+            selectedGoalId={selectedSimGoalId}
+            onSelectGoal={setFocusGoalId}
+          />
         </>
       )}
 
@@ -198,16 +205,13 @@ function GoalCard({
   );
 
   return (
-    <Pressable
-      onPress={onFocus}
-      style={[
-        styles.card,
-        { borderColor: focused ? accent : `${accent}55` },
-        focused && { backgroundColor: `${accent}10` },
-      ]}>
-      <View style={[styles.cardAccent, { backgroundColor: accent }]} />
-      <View style={styles.cardBody}>
-        <View style={styles.cardHead}>
+    <CollapsibleWidget
+      accent={accent}
+      defaultExpanded
+      style={focused ? { borderColor: accent, backgroundColor: `${accent}10` } : undefined}
+      onHeaderPress={onFocus}
+      header={
+        <>
           <View style={[styles.iconBubble, { backgroundColor: `${accent}28` }]}>
             <Ionicons name={meta.ion} size={22} color={accent} />
           </View>
@@ -223,53 +227,65 @@ function GoalCard({
               <Text style={styles.metaTiny}>{meta.label}</Text>
             </View>
           </View>
+        </>
+      }
+      headerActions={
+        <>
           <Pressable onPress={onEdit} hitSlop={8} style={styles.iconBtn}>
             <Ionicons name="pencil-outline" size={18} color={Palette.textMuted} />
           </Pressable>
           <Pressable onPress={onDelete} hitSlop={8} style={styles.iconBtn}>
             <Ionicons name="trash-outline" size={18} color={Palette.coral} />
           </Pressable>
+        </>
+      }
+      collapsedSummary={
+        <View style={styles.collapsedRow}>
+          <Text style={styles.collapsedAmt}>
+            {formatAud(goal.current_aud)}
+            <Text style={styles.amountsOf}> / {formatAud(goal.target_aud)}</Text>
+          </Text>
+          <Text style={[styles.pct, { color: accent }]}>{pct}%</Text>
         </View>
+      }>
+      <Text style={styles.amounts}>
+        {formatAud(goal.current_aud)}
+        <Text style={styles.amountsOf}> of {formatAud(goal.target_aud)}</Text>
+      </Text>
 
-        <Text style={styles.amounts}>
-          {formatAud(goal.current_aud)}
-          <Text style={styles.amountsOf}> of {formatAud(goal.target_aud)}</Text>
-        </Text>
-
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${pct}%` as `${number}%`, backgroundColor: accent }]} />
-        </View>
-        <Text style={[styles.pct, { color: accent }]}>{pct}% complete</Text>
-
-        {Number.isFinite(eta.months) && eta.months > 0 ? (
-          <View style={styles.etaBox}>
-            <Ionicons name="time-outline" size={16} color={Palette.textMuted} />
-            <Text style={styles.etaText}>You’d arrive around {eta.arriveLabel}</Text>
-          </View>
-        ) : eta.reached ? (
-          <View style={styles.etaBox}>
-            <Ionicons name="checkmark-circle-outline" size={16} color={Palette.teal} />
-            <Text style={styles.etaText}>Goal reached</Text>
-          </View>
-        ) : null}
-
-        <Text style={styles.contribMeta}>
-          {formatAud(goal.contribution_aud)} {goal.contribution_frequency}
-          {goal.reminder ? ' · reminder on' : ''}
-        </Text>
-
-        <Pressable
-          onPress={onContribute}
-          style={({ pressed }) => [
-            styles.contributeBtn,
-            { backgroundColor: SectionAccents.contribute },
-            pressed && { opacity: 0.9 },
-          ]}>
-          <Ionicons name="add" size={18} color={Palette.void} />
-          <Text style={styles.contributeLabel}>Record real contribution</Text>
-        </Pressable>
+      <View style={styles.track}>
+        <View style={[styles.fill, { width: `${pct}%` as `${number}%`, backgroundColor: accent }]} />
       </View>
-    </Pressable>
+      <Text style={[styles.pct, { color: accent }]}>{pct}% complete</Text>
+
+      {Number.isFinite(eta.months) && eta.months > 0 ? (
+        <View style={styles.etaBox}>
+          <Ionicons name="time-outline" size={16} color={Palette.textMuted} />
+          <Text style={styles.etaText}>You’d arrive around {eta.arriveLabel}</Text>
+        </View>
+      ) : eta.reached ? (
+        <View style={styles.etaBox}>
+          <Ionicons name="checkmark-circle-outline" size={16} color={Palette.teal} />
+          <Text style={styles.etaText}>Goal reached</Text>
+        </View>
+      ) : null}
+
+      <Text style={styles.contribMeta}>
+        {formatAud(goal.contribution_aud)} {goal.contribution_frequency}
+        {goal.reminder ? ' · reminder on' : ''}
+      </Text>
+
+      <Pressable
+        onPress={onContribute}
+        style={({ pressed }) => [
+          styles.contributeBtn,
+          { backgroundColor: accent },
+          pressed && { opacity: 0.9 },
+        ]}>
+        <Ionicons name="add" size={18} color={Palette.void} />
+        <Text style={styles.contributeLabel}>Record real contribution</Text>
+      </Pressable>
+    </CollapsibleWidget>
   );
 }
 
@@ -323,17 +339,6 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '800', fontSize: 18 },
   emptySub: { color: Palette.textMuted, textAlign: 'center', marginBottom: Spacing.sm },
-  card: {
-    flexDirection: 'row',
-    backgroundColor: Palette.panel,
-    borderRadius: Radii.xl,
-    borderWidth: 1,
-    marginBottom: Spacing.md,
-    overflow: 'hidden',
-  },
-  cardAccent: { width: 4 },
-  cardBody: { flex: 1, padding: Spacing.md, gap: 8 },
-  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   iconBubble: {
     width: 44,
     height: 44,
@@ -360,12 +365,22 @@ const styles = StyleSheet.create({
   badgeText: { color: Palette.amber, fontSize: 10, fontWeight: '700' },
   metaTiny: { color: Palette.textDim, fontSize: 11 },
   iconBtn: { padding: 6 },
+  collapsedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  collapsedAmt: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '700',
+    fontSize: 14,
+  },
   amounts: {
     color: Palette.text,
     fontFamily: Fonts.display,
     fontWeight: '800',
     fontSize: 18,
-    marginTop: 4,
   },
   amountsOf: { color: Palette.textMuted, fontWeight: '600', fontSize: 14 },
   track: {
