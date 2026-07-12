@@ -1,18 +1,117 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useFinanceStore } from '@/stores/finance-store';
+import { Palette, Fonts } from '@/constants/theme';
+import { syncNow } from '@/lib/sync/engine';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+const queryClient = new QueryClient();
 
-SplashScreen.preventAutoHideAsync();
+function AuthGate({ children }: { children: ReactNode }) {
+  const ready = useFinanceStore((s) => s.ready);
+  const booting = useFinanceStore((s) => s.booting);
+  const session = useFinanceStore((s) => s.session);
+  const bootstrap = useFinanceStore((s) => s.bootstrap);
+  const refresh = useFinanceStore((s) => s.refresh);
+  const router = useRouter();
+  const segments = useSegments();
+  const [syncing, setSyncing] = useState(false);
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  useEffect(() => {
+    bootstrap();
+  }, [bootstrap]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const root = String(segments[0] ?? '');
+    const inAuth = root === 'login';
+    const signedIn = Boolean(session);
+    if (!signedIn && !inAuth) {
+      router.replace('/login' as never);
+    } else if (signedIn && inAuth) {
+      router.replace('/(tabs)' as never);
+    }
+  }, [ready, session, segments, router]);
+
+  useEffect(() => {
+    if (!ready || !session) return;
+    let alive = true;
+    const tick = async () => {
+      if (!alive || syncing) return;
+      setSyncing(true);
+      try {
+        await syncNow();
+        await refresh();
+      } finally {
+        if (alive) setSyncing(false);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 45000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [ready, session, refresh]);
+
+  if (!ready || booting) {
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator color={Palette.cyan} size="large" />
+        <Text style={styles.bootText}>AppCash</Text>
+        <Text style={styles.bootSub}>Loading your finance grid…</Text>
+      </View>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <StatusBar style="light" />
+      <AuthGate>
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: Palette.deep },
+            headerTintColor: Palette.text,
+            headerTitleStyle: { fontFamily: Fonts.display, fontWeight: '700' },
+            contentStyle: { backgroundColor: Palette.void },
+            headerShadowVisible: false,
+          }}>
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="notifications" options={{ title: 'Notifications', presentation: 'modal' }} />
+          <Stack.Screen name="profile" options={{ title: 'Account', presentation: 'modal' }} />
+          <Stack.Screen name="receipt/review" options={{ title: 'Review receipt', presentation: 'modal' }} />
+          <Stack.Screen name="fixed/index" options={{ title: 'Fixed income & bills' }} />
+          <Stack.Screen name="fixed/edit" options={{ title: 'Edit fixed item', presentation: 'modal' }} />
+          <Stack.Screen name="categories" options={{ title: 'Categories' }} />
+          <Stack.Screen name="insights" options={{ title: 'Market prediction' }} />
+        </Stack>
+      </AuthGate>
+    </QueryClientProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    backgroundColor: Palette.void,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  bootText: {
+    color: Palette.cyan,
+    fontFamily: Fonts.display,
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  bootSub: { color: Palette.textMuted },
+});

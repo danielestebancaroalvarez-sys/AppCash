@@ -1,23 +1,34 @@
 {
   "expo": {
-    "name": "appcash",
+    "name": "AppCash",
     "slug": "appcash",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "appcash",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.deco2449584.appcash"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#070B14",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.deco2449584.appcash",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#121C31",
+      "barStyle": "light-content"
     },
     "web": {
       "output": "static",
@@ -25,18 +36,39 @@
     },
     "plugins": [
       "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#070B14",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow AppCash to access photos for receipt scanning.",
+          "cameraPermission": "Allow AppCash to take receipt photos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#3DE7FF"
+        }
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
-      "typedRoutes": true,
+      "typedRoutes": false,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "local-appcash"
+      }
     }
   }
 }
