@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.panel,
     borderRadius: Radii.xl,
     borderWidth: 1,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
     overflow: 'hidden',
   },
   bar: { width: 4 },

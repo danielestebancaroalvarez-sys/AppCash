@@ -8,6 +8,8 @@ import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
+import { useWidgetPrefs } from '@/hooks/use-widget-prefs';
+import { DASHBOARD_WIDGETS } from '@/lib/dashboard/widgets';
 import {
   getDeepSeekApiKey,
   getGeminiApiKey,
@@ -59,6 +61,7 @@ export default function SettingsScreen() {
   const setSession = useFinanceStore((s) => s.setSession);
   const { alert, confirm, Dialog } = useAppDialog();
   const { refreshing, onRefresh } = useSheetRefresh();
+  const { prefs, setEnabled } = useWidgetPrefs();
 
   const [provider, setProvider] = useState<ReceiptAiProvider>('openrouter');
   const [openrouter, setOpenrouter] = useState('');
@@ -258,6 +261,32 @@ export default function SettingsScreen() {
         )}
       </GlassPanel>
 
+      <SectionTitle
+        title="Dashboard widgets"
+        subtitle="Show or hide Home tab cards. App Balance and Period stay on."
+      />
+      <GlassPanel style={{ gap: 4 }}>
+        {DASHBOARD_WIDGETS.map((w) => {
+          const on = prefs[w.id] !== false;
+          return (
+            <Pressable
+              key={w.id}
+              onPress={() => setEnabled(w.id, !on)}
+              style={styles.widgetRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.widgetLabel}>{w.label}</Text>
+                <Text style={styles.widgetHint}>{w.hint}</Text>
+              </View>
+              <View style={[styles.toggle, on && styles.toggleOn]}>
+                <Text style={[styles.toggleText, on && styles.toggleTextOn]}>
+                  {on ? 'On' : 'Off'}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </GlassPanel>
+
       <SectionTitle title="Fixed & categories" />
       <GlassPanel style={{ gap: Spacing.sm }}>
         <PrimaryButton
@@ -387,4 +416,27 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
   chipText: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
   chipTextOn: { color: Palette.void },
+  widgetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Palette.stroke,
+  },
+  widgetLabel: { color: Palette.text, fontWeight: '700', fontSize: 14 },
+  widgetHint: { color: Palette.textDim, fontSize: 11, marginTop: 2 },
+  toggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radii.pill,
+    backgroundColor: Palette.panelElevated,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    minWidth: 48,
+    alignItems: 'center',
+  },
+  toggleOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
+  toggleText: { color: Palette.textMuted, fontSize: 12, fontWeight: '700' },
+  toggleTextOn: { color: Palette.void },
 });
