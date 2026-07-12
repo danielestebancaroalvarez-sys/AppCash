@@ -95,6 +95,7 @@ export default function RootLayout() {
           <Stack.Screen name="fixed/edit" options={{ title: 'Edit fixed item', presentation: 'modal' }} />
           <Stack.Screen name="categories" options={{ title: 'Categories' }} />
           <Stack.Screen name="insights" options={{ title: 'Market prediction' }} />
+          <Stack.Screen name="savings/edit" options={{ title: 'Savings goal', presentation: 'modal' }} />
         </Stack>
       </AuthGate>
     </QueryClientProvider>

@@ -87,7 +87,31 @@ export interface SavingsGoal {
   deadline: string;
   user_id: string;
   updated_at: string;
+  kind: SavingsGoalKind;
+  color: string;
+  plan_mode: SavingsPlanMode;
+  contribution_aud: number;
+  contribution_frequency: ContributionFrequency;
+  yield_mode: SavingsYieldMode;
+  annual_rate: number;
+  reminder: boolean;
 }
+
+export type SavingsGoalKind =
+  | 'emergency'
+  | 'vacation'
+  | 'home'
+  | 'retirement'
+  | 'education'
+  | 'vehicle'
+  | 'family'
+  | 'wedding'
+  | 'investment'
+  | 'other';
+
+export type SavingsPlanMode = 'contribution' | 'deadline';
+export type SavingsYieldMode = 'none' | 'yield';
+export type ContributionFrequency = 'weekly' | 'fortnightly' | 'monthly';
 
 export interface SavingsSim {
   id: string;

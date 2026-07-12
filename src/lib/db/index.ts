@@ -139,6 +139,28 @@ export async function initDatabase(): Promise<void> {
       value TEXT NOT NULL
     );
   `);
+
+  await migrateSavingsGoalColumns(db);
+}
+
+async function migrateSavingsGoalColumns(db: SQLite.SQLiteDatabase): Promise<void> {
+  const alters = [
+    `ALTER TABLE savings_goals ADD COLUMN kind TEXT NOT NULL DEFAULT 'other'`,
+    `ALTER TABLE savings_goals ADD COLUMN color TEXT NOT NULL DEFAULT '#3DE7FF'`,
+    `ALTER TABLE savings_goals ADD COLUMN plan_mode TEXT NOT NULL DEFAULT 'contribution'`,
+    `ALTER TABLE savings_goals ADD COLUMN contribution_aud REAL NOT NULL DEFAULT 0`,
+    `ALTER TABLE savings_goals ADD COLUMN contribution_frequency TEXT NOT NULL DEFAULT 'monthly'`,
+    `ALTER TABLE savings_goals ADD COLUMN yield_mode TEXT NOT NULL DEFAULT 'none'`,
+    `ALTER TABLE savings_goals ADD COLUMN annual_rate REAL NOT NULL DEFAULT 0`,
+    `ALTER TABLE savings_goals ADD COLUMN reminder INTEGER NOT NULL DEFAULT 0`,
+  ];
+  for (const sql of alters) {
+    try {
+      await db.execAsync(sql);
+    } catch {
+      // column already exists
+    }
+  }
 }
 
 function boolToInt(v: boolean): number {
@@ -399,18 +421,83 @@ export async function listReceiptItems(receiptId?: string): Promise<ReceiptItem[
 export async function upsertSavingsGoal(g: SavingsGoal): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO savings_goals (id, name, target_aud, current_aud, deadline, user_id, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO savings_goals (
+      id, name, target_aud, current_aud, deadline, user_id, updated_at,
+      kind, color, plan_mode, contribution_aud, contribution_frequency,
+      yield_mode, annual_rate, reminder
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name, target_aud=excluded.target_aud, current_aud=excluded.current_aud,
-       deadline=excluded.deadline, user_id=excluded.user_id, updated_at=excluded.updated_at`,
-    [g.id, g.name, g.target_aud, g.current_aud, g.deadline, g.user_id, g.updated_at]
+       deadline=excluded.deadline, user_id=excluded.user_id, updated_at=excluded.updated_at,
+       kind=excluded.kind, color=excluded.color, plan_mode=excluded.plan_mode,
+       contribution_aud=excluded.contribution_aud,
+       contribution_frequency=excluded.contribution_frequency,
+       yield_mode=excluded.yield_mode, annual_rate=excluded.annual_rate,
+       reminder=excluded.reminder`,
+    [
+      g.id,
+      g.name,
+      g.target_aud,
+      g.current_aud,
+      g.deadline,
+      g.user_id,
+      g.updated_at,
+      g.kind,
+      g.color,
+      g.plan_mode,
+      g.contribution_aud,
+      g.contribution_frequency,
+      g.yield_mode,
+      g.annual_rate,
+      boolToInt(g.reminder),
+    ]
   );
 }
 
 export async function listSavingsGoals(): Promise<SavingsGoal[]> {
   const db = await getDb();
-  return db.getAllAsync<SavingsGoal>('SELECT * FROM savings_goals ORDER BY updated_at DESC');
+  const rows = await db.getAllAsync<{
+    id: string;
+    name: string;
+    target_aud: number;
+    current_aud: number;
+    deadline: string;
+    user_id: string;
+    updated_at: string;
+    kind?: string;
+    color?: string;
+    plan_mode?: string;
+    contribution_aud?: number;
+    contribution_frequency?: string;
+    yield_mode?: string;
+    annual_rate?: number;
+    reminder?: number;
+  }>('SELECT * FROM savings_goals ORDER BY updated_at DESC');
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    target_aud: r.target_aud,
+    current_aud: r.current_aud,
+    deadline: r.deadline ?? '',
+    user_id: r.user_id,
+    updated_at: r.updated_at,
+    kind: (r.kind as SavingsGoal['kind']) || 'other',
+    color: r.color || '#3DE7FF',
+    plan_mode: (r.plan_mode as SavingsGoal['plan_mode']) || 'contribution',
+    contribution_aud: r.contribution_aud ?? 0,
+    contribution_frequency:
+      (r.contribution_frequency as SavingsGoal['contribution_frequency']) || 'monthly',
+    yield_mode: (r.yield_mode as SavingsGoal['yield_mode']) || 'none',
+    annual_rate: r.annual_rate ?? 0,
+    reminder: Boolean(r.reminder),
+  }));
+}
+
+export async function deleteSavingsGoal(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM savings_goals WHERE id = ?', [id]);
+  await db.runAsync('DELETE FROM savings_sims WHERE goal_id = ?', [id]);
 }
 
 export async function upsertSavingsSim(s: SavingsSim): Promise<void> {

@@ -1,18 +1,36 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format, parseISO } from 'date-fns';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
-import { Palette, Radii, Spacing } from '@/constants/theme';
+import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { createId } from '@/lib/id';
-import { nextDueFrom, nowIso } from '@/lib/dates';
+import { formatDisplayDate, nextDueFrom, nowIso, todayIsoDate } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
 import { upsertFixedItem } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
 import { scheduleFixedItemReminders } from '@/lib/notifications/schedule';
 import type { Direction, Period } from '@/types/models';
+
+function toDate(iso: string): Date {
+  try {
+    return parseISO(iso.length === 10 ? `${iso}T12:00:00` : iso);
+  } catch {
+    return new Date();
+  }
+}
 
 export default function FixedEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -35,6 +53,10 @@ export default function FixedEditScreen() {
   const [categoryId, setCategoryId] = useState(
     existing?.category_id ?? categories.find((c) => c.type === 'expense')?.id ?? ''
   );
+  const [nextDue, setNextDue] = useState(
+    existing?.next_due || nextDueFrom(existing?.period ?? 'monthly')
+  );
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const periods: Period[] = ['weekly', 'fortnightly', 'monthly', 'yearly'];
 
@@ -43,10 +65,27 @@ export default function FixedEditScreen() {
     [categories, direction]
   );
 
+  const onPeriodChange = (p: Period) => {
+    setPeriod(p);
+    // Only auto-suggest next due when creating a new item
+    if (!existing) {
+      setNextDue(nextDueFrom(p));
+    }
+  };
+
+  const onDateChange = (_event: unknown, date?: Date) => {
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (date) setNextDue(format(date, 'yyyy-MM-dd'));
+  };
+
   const save = async () => {
     const value = parseAmount(amount);
     if (!name.trim() || !value || !userId || !categoryId) {
       alert('Missing fields', 'Fill name, amount, who, and category.');
+      return;
+    }
+    if (!nextDue) {
+      alert('Missing date', 'Pick the next payment / due date.');
       return;
     }
     const item = {
@@ -60,7 +99,7 @@ export default function FixedEditScreen() {
       auto_debit: autoDebit,
       notify_days_before: Number(notifyDays) || 0,
       active: true,
-      next_due: existing?.next_due ?? nextDueFrom(period),
+      next_due: nextDue,
       updated_at: nowIso(),
     };
     await upsertFixedItem(item);
@@ -74,27 +113,61 @@ export default function FixedEditScreen() {
     <Screen>
       <GlassPanel style={{ gap: Spacing.sm }}>
         <Text style={styles.label}>Name</Text>
-        <TextInput value={name} onChangeText={setName} style={styles.input} placeholderTextColor={Palette.textDim} placeholder="Rent, Gym…" />
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          style={styles.input}
+          placeholderTextColor={Palette.textDim}
+          placeholder="Rent, Gym…"
+        />
         <Text style={styles.label}>Amount AUD</Text>
-        <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" style={styles.input} placeholderTextColor={Palette.textDim} />
+        <TextInput
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="decimal-pad"
+          style={styles.input}
+          placeholderTextColor={Palette.textDim}
+        />
 
         <Text style={styles.label}>Direction</Text>
         <View style={styles.row}>
           {(['in', 'out'] as Direction[]).map((d) => (
-            <Text key={d} onPress={() => setDirection(d)} style={[styles.chip, direction === d && styles.chipOn]}>
-              {d === 'in' ? 'Income' : 'Expense'}
-            </Text>
+            <Pressable key={d} onPress={() => setDirection(d)}>
+              <Text style={[styles.chip, direction === d && styles.chipOn]}>
+                {d === 'in' ? 'Income' : 'Expense'}
+              </Text>
+            </Pressable>
           ))}
         </View>
 
         <Text style={styles.label}>Period</Text>
         <View style={styles.row}>
           {periods.map((p) => (
-            <Text key={p} onPress={() => setPeriod(p)} style={[styles.chip, period === p && styles.chipOn]}>
-              {p}
-            </Text>
+            <Pressable key={p} onPress={() => onPeriodChange(p)}>
+              <Text style={[styles.chip, period === p && styles.chipOn]}>{p}</Text>
+            </Pressable>
           ))}
         </View>
+
+        <Text style={styles.label}>Next due date</Text>
+        <Pressable
+          onPress={() => setShowDatePicker(true)}
+          style={({ pressed }) => [styles.dateBtn, pressed && { opacity: 0.85 }]}>
+          <Text style={styles.dateValue}>{formatDisplayDate(nextDue)}</Text>
+          <Text style={styles.dateHint}>Tap to change · {nextDue}</Text>
+        </Pressable>
+        {showDatePicker ? (
+          <DateTimePicker
+            value={toDate(nextDue || todayIsoDate())}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onDateChange}
+            themeVariant="dark"
+          />
+        ) : null}
+        {Platform.OS === 'ios' && showDatePicker ? (
+          <PrimaryButton label="Done with date" onPress={() => setShowDatePicker(false)} variant="ghost" />
+        ) : null}
 
         <View style={styles.switchRow}>
           <Text style={styles.label}>Auto debit</Text>
@@ -103,25 +176,31 @@ export default function FixedEditScreen() {
         {!autoDebit ? (
           <>
             <Text style={styles.label}>Notify days before</Text>
-            <TextInput value={notifyDays} onChangeText={setNotifyDays} keyboardType="number-pad" style={styles.input} placeholderTextColor={Palette.textDim} />
+            <TextInput
+              value={notifyDays}
+              onChangeText={setNotifyDays}
+              keyboardType="number-pad"
+              style={styles.input}
+              placeholderTextColor={Palette.textDim}
+            />
           </>
         ) : null}
 
         <Text style={styles.label}>Person</Text>
         <View style={styles.row}>
           {users.map((u) => (
-            <Text key={u.id} onPress={() => setUserId(u.id)} style={[styles.chip, userId === u.id && styles.chipOn]}>
-              {u.name}
-            </Text>
+            <Pressable key={u.id} onPress={() => setUserId(u.id)}>
+              <Text style={[styles.chip, userId === u.id && styles.chipOn]}>{u.name}</Text>
+            </Pressable>
           ))}
         </View>
 
         <Text style={styles.label}>Category</Text>
         <View style={styles.row}>
           {filteredCats.map((c) => (
-            <Text key={c.id} onPress={() => setCategoryId(c.id)} style={[styles.chip, categoryId === c.id && styles.chipOn]}>
-              {c.name}
-            </Text>
+            <Pressable key={c.id} onPress={() => setCategoryId(c.id)}>
+              <Text style={[styles.chip, categoryId === c.id && styles.chipOn]}>{c.name}</Text>
+            </Pressable>
           ))}
         </View>
 
@@ -143,6 +222,22 @@ const styles = StyleSheet.create({
     color: Palette.text,
     backgroundColor: Palette.panelElevated,
   },
+  dateBtn: {
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    borderRadius: Radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: Palette.panelElevated,
+    gap: 2,
+  },
+  dateValue: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  dateHint: { color: Palette.cyan, fontSize: 12 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     color: Palette.textMuted,

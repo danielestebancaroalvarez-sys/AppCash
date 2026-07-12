@@ -255,6 +255,14 @@ async function buildSnapshots(): Promise<Array<{ sheet: SheetName; rows: string[
     actual: g.current_aud,
     fecha_limite: g.deadline,
     quien: userName(g.user_id),
+    categoria: g.kind,
+    color: g.color,
+    plan: g.plan_mode,
+    aporte: g.contribution_aud,
+    frecuencia: g.contribution_frequency,
+    rentabilidad: g.yield_mode,
+    tasa: g.annual_rate,
+    recordatorio: g.reminder,
     actualizado: g.updated_at,
   }));
 
@@ -436,6 +444,17 @@ export async function pullFromSheets(): Promise<boolean> {
   if (ahorros.length > 0) {
     const goals: SavingsGoal[] = [];
     for (const row of ahorros) {
+      const freq =
+        row.frecuencia === 'weekly' || row.frecuencia === 'semanal'
+          ? 'weekly'
+          : row.frecuencia === 'fortnightly' || row.frecuencia === 'quincenal'
+            ? 'fortnightly'
+            : 'monthly';
+      const plan = row.plan === 'deadline' || row.plan === 'fecha' ? 'deadline' : 'contribution';
+      const yieldMode =
+        row.rentabilidad === 'yield' || row.rentabilidad === 'con' || row.rentabilidad === 'si'
+          ? 'yield'
+          : 'none';
       goals.push({
         id: row.id || createId(),
         name: row.nombre || 'Goal',
@@ -444,6 +463,14 @@ export async function pullFromSheets(): Promise<boolean> {
         deadline: row.fecha_limite,
         user_id: await resolveUserId(row.quien, users),
         updated_at: row.actualizado || nowIso(),
+        kind: (row.categoria as SavingsGoal['kind']) || 'other',
+        color: row.color || '#3DE7FF',
+        plan_mode: plan,
+        contribution_aud: row.aporte,
+        contribution_frequency: freq,
+        yield_mode: yieldMode,
+        annual_rate: row.tasa,
+        reminder: row.recordatorio,
       });
     }
     await replaceSheetRows('savings_goals', goals, upsertSavingsGoal);

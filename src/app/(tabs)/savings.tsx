@@ -1,208 +1,415 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
-import { AmountText, GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
+import { AppModal } from '@/components/ui/AppModal';
+import { PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
-import { ProgressRing } from '@/components/charts/FinanceCharts';
+import { SavingsSimWidget } from '@/components/savings/SavingsSimWidget';
+import { SectionAccents, savingsKindMeta } from '@/constants/savings';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { formatAud, parseAmount } from '@/lib/money';
 import { createId } from '@/lib/id';
 import { nowIso, todayIsoDate } from '@/lib/dates';
-import { upsertSavingsGoal, upsertSavingsSim, upsertTransaction } from '@/lib/db';
+import { deleteSavingsGoal, upsertSavingsGoal, upsertTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
+import { projectSavings } from '@/lib/savings/simulate';
+import type { SavingsGoal } from '@/types/models';
 
 export default function SavingsScreen() {
+  const router = useRouter();
   const goals = useFinanceStore((s) => s.savingsGoals);
-  const activeUserId = useFinanceStore((s) => s.activeUserId);
-  const users = useFinanceStore((s) => s.users);
   const categories = useFinanceStore((s) => s.categories);
   const refresh = useFinanceStore((s) => s.refresh);
-  const { alert, Dialog } = useAppDialog();
-  const [name, setName] = useState('');
-  const [target, setTarget] = useState('');
-  const [weekly, setWeekly] = useState('100');
-  const [selectedGoalId, setSelectedGoalId] = useState<string>('');
-  const [contribute, setContribute] = useState('');
+  const { alert, confirm, Dialog } = useAppDialog();
 
-  const selected = goals.find((g) => g.id === (selectedGoalId || goals[0]?.id));
-
-  const sim = useMemo(() => {
-    if (!selected) return null;
-    const remaining = Math.max(0, selected.target_aud - selected.current_aud);
-    const w = parseAmount(weekly) || 1;
-    const weeks = Math.ceil(remaining / w);
-    return { remaining, weeks, w };
-  }, [selected, weekly]);
-
-  const createGoal = async () => {
-    const user = activeUserId || users[0]?.id;
-    const t = parseAmount(target);
-    if (!name.trim() || !t || !user) return;
-    const goal = {
-      id: createId(),
-      name: name.trim(),
-      target_aud: t,
-      current_aud: 0,
-      deadline: '',
-      user_id: user,
-      updated_at: nowIso(),
-    };
-    await upsertSavingsGoal(goal);
-    await queueMutation('savings_goals', goal);
-    setName('');
-    setTarget('');
-    await refresh();
-  };
-
-  const runSim = async () => {
-    if (!selected || !sim) return;
-    const row = {
-      id: createId(),
-      goal_id: selected.id,
-      weekly_amount: sim.w,
-      result_weeks: sim.weeks,
-      created_at: nowIso(),
-      updated_at: nowIso(),
-    };
-    await upsertSavingsSim(row);
-    alert('Simulation', `At ${formatAud(sim.w)}/week you reach the goal in ~${sim.weeks} weeks.`);
-  };
+  const [focusGoalId, setFocusGoalId] = useState<string | null>(null);
+  const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
+  const [contributeAmt, setContributeAmt] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const addContribution = async () => {
-    if (!selected) return;
-    const amount = parseAmount(contribute);
-    if (!amount) return;
-    const updated = {
-      ...selected,
-      current_aud: selected.current_aud + amount,
-      updated_at: nowIso(),
-    };
-    await upsertSavingsGoal(updated);
-    await queueMutation('savings_goals', updated);
-
-    const savingsCat = categories.find((c) => c.type === 'savings') ?? categories[0];
-    if (savingsCat) {
-      const tx = {
-        id: createId(),
-        user_id: selected.user_id,
-        type: 'savings_contrib' as const,
-        category_id: savingsCat.id,
-        amount_aud: amount,
-        date: todayIsoDate(),
-        note: `Contribution to ${selected.name}`,
-        merchant: 'Savings',
-        receipt_id: '',
-        created_at: nowIso(),
+    if (!contributeGoal) return;
+    const amount = parseAmount(contributeAmt);
+    if (!amount) {
+      alert('Amount needed', 'Enter how much you contributed.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated: SavingsGoal = {
+        ...contributeGoal,
+        current_aud: contributeGoal.current_aud + amount,
         updated_at: nowIso(),
       };
-      await upsertTransaction(tx);
-      await queueMutation('transactions', tx);
+      await upsertSavingsGoal(updated);
+      await queueMutation('savings_goals', updated);
+
+      const savingsCat = categories.find((c) => c.type === 'savings') ?? categories[0];
+      if (savingsCat) {
+        const tx = {
+          id: createId(),
+          user_id: contributeGoal.user_id,
+          type: 'savings_contrib' as const,
+          category_id: savingsCat.id,
+          amount_aud: amount,
+          date: todayIsoDate(),
+          note: `Contribution to ${contributeGoal.name}`,
+          merchant: 'Savings',
+          receipt_id: '',
+          created_at: nowIso(),
+          updated_at: nowIso(),
+        };
+        await upsertTransaction(tx);
+        await queueMutation('transactions', tx);
+      }
+      setContributeGoal(null);
+      setContributeAmt('');
+      setFocusGoalId(updated.id);
+      await refresh();
+    } finally {
+      setBusy(false);
     }
-    setContribute('');
-    await refresh();
+  };
+
+  const removeGoal = (goal: SavingsGoal) => {
+    confirm(
+      `Delete “${goal.name}”?`,
+      'This removes the goal from the phone and next Sheets sync.',
+      async () => {
+        await deleteSavingsGoal(goal.id);
+        await queueMutation('savings_goals', { id: goal.id, deleted: true });
+        if (focusGoalId === goal.id) setFocusGoalId(null);
+        await refresh();
+      },
+      { confirmLabel: 'Delete', tone: 'danger' }
+    );
   };
 
   return (
     <Screen>
-      <Text style={styles.title}>Savings plans</Text>
-      <Text style={styles.sub}>Goals, contributions, and weekly projections.</Text>
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kicker}>Household</Text>
+          <Text style={styles.title}>Savings</Text>
+          <Text style={styles.sub}>Goals & progress</Text>
+        </View>
+        <Pressable
+          onPress={() => router.push('/savings/edit' as never)}
+          style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85 }]}>
+          <Ionicons name="add" size={28} color={Palette.void} />
+        </Pressable>
+      </View>
 
-      {selected ? (
-        <GlassPanel glow style={{ alignItems: 'center', marginBottom: Spacing.md }}>
-          <ProgressRing
-            progress={selected.current_aud / Math.max(selected.target_aud, 1)}
-            label={selected.name}
-            sublabel={`${formatAud(selected.current_aud)} / ${formatAud(selected.target_aud)}`}
-          />
-        </GlassPanel>
-      ) : null}
-
-      <SectionTitle title="Your goals" />
-      {goals.map((g) => (
-        <GlassPanel
-          key={g.id}
-          onPress={() => setSelectedGoalId(g.id)}
-          style={[styles.goal, selected?.id === g.id ? styles.goalOn : null]}>
-          <Text style={styles.goalName}>{g.name}</Text>
-          <AmountText value={formatAud(g.current_aud)} tone="accent" size="sm" />
-        </GlassPanel>
-      ))}
-
-      <SectionTitle title="Simulator" subtitle="If I save this every week…" />
-      <GlassPanel style={{ gap: Spacing.sm }}>
-        <TextInput
-          value={weekly}
-          onChangeText={setWeekly}
-          keyboardType="decimal-pad"
-          placeholder="Weekly AUD"
-          placeholderTextColor={Palette.textDim}
-          style={styles.input}
-        />
-        {sim ? (
-          <Text style={styles.simResult}>
-            Remaining {formatAud(sim.remaining)} · ~{sim.weeks} weeks
+      {!goals.length ? (
+        <View style={styles.empty}>
+          <Ionicons name="wallet-outline" size={40} color={Palette.cyan} />
+          <Text style={styles.emptyTitle}>No goals yet</Text>
+          <Text style={styles.emptySub}>
+            Create your first savings goal — vacation, house, emergency…
           </Text>
-        ) : null}
-        <PrimaryButton label="Save simulation" onPress={runSim} />
-      </GlassPanel>
+          <PrimaryButton label="New goal" onPress={() => router.push('/savings/edit' as never)} />
+        </View>
+      ) : (
+        <>
+          {goals.map((goal) => (
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              focused={focusGoalId === goal.id}
+              onFocus={() => setFocusGoalId(goal.id)}
+              onContribute={() => {
+                setContributeGoal(goal);
+                setContributeAmt('');
+                setFocusGoalId(goal.id);
+              }}
+              onEdit={() =>
+                router.push({ pathname: '/savings/edit' as never, params: { id: goal.id } })
+              }
+              onDelete={() => removeGoal(goal)}
+            />
+          ))}
 
-      <SectionTitle title="Add contribution" />
-      <GlassPanel style={{ gap: Spacing.sm }}>
+          <Text style={styles.sectionLabel}>Simulation</Text>
+          <SavingsSimWidget goals={goals} preferredGoalId={focusGoalId} />
+        </>
+      )}
+
+      <AppModal
+        visible={Boolean(contributeGoal)}
+        title="Record contribution"
+        message={contributeGoal ? `Add money toward “${contributeGoal.name}”.` : undefined}
+        confirmLabel={busy ? 'Saving…' : 'Add'}
+        cancelLabel="Cancel"
+        tone="accent"
+        confirmDisabled={busy}
+        onCancel={() => setContributeGoal(null)}
+        onRequestClose={() => setContributeGoal(null)}
+        onConfirm={addContribution}>
         <TextInput
-          value={contribute}
-          onChangeText={setContribute}
+          value={contributeAmt}
+          onChangeText={setContributeAmt}
           keyboardType="decimal-pad"
           placeholder="Amount AUD"
           placeholderTextColor={Palette.textDim}
           style={styles.input}
+          autoFocus
         />
-        <PrimaryButton label="Record contribution" onPress={addContribution} />
-      </GlassPanel>
+      </AppModal>
 
-      <SectionTitle title="New goal" />
-      <GlassPanel style={{ gap: Spacing.sm }}>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="Goal name"
-          placeholderTextColor={Palette.textDim}
-          style={styles.input}
-        />
-        <TextInput
-          value={target}
-          onChangeText={setTarget}
-          keyboardType="decimal-pad"
-          placeholder="Target AUD"
-          placeholderTextColor={Palette.textDim}
-          style={styles.input}
-        />
-        <PrimaryButton label="Create goal" onPress={createGoal} variant="ghost" />
-      </GlassPanel>
       {Dialog}
     </Screen>
   );
 }
 
+function GoalCard({
+  goal,
+  focused,
+  onFocus,
+  onContribute,
+  onEdit,
+  onDelete,
+}: {
+  goal: SavingsGoal;
+  focused: boolean;
+  onFocus: () => void;
+  onContribute: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const meta = savingsKindMeta(goal.kind);
+  const accent = goal.color || meta.color;
+  const progress = Math.min(1, goal.current_aud / Math.max(goal.target_aud, 1));
+  const pct = Math.round(progress * 100);
+
+  const eta = useMemo(
+    () =>
+      projectSavings({
+        current: goal.current_aud,
+        target: goal.target_aud,
+        contribution: goal.contribution_aud,
+        frequency: goal.contribution_frequency,
+        yieldMode: goal.yield_mode,
+        annualRate: goal.annual_rate,
+      }),
+    [goal]
+  );
+
+  return (
+    <Pressable
+      onPress={onFocus}
+      style={[
+        styles.card,
+        { borderColor: focused ? accent : `${accent}55` },
+        focused && { backgroundColor: `${accent}10` },
+      ]}>
+      <View style={[styles.cardAccent, { backgroundColor: accent }]} />
+      <View style={styles.cardBody}>
+        <View style={styles.cardHead}>
+          <View style={[styles.iconBubble, { backgroundColor: `${accent}28` }]}>
+            <Ionicons name={meta.ion} size={22} color={accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.goalName}>{goal.name}</Text>
+            <View style={styles.badgeRow}>
+              {goal.reminder ? (
+                <View style={styles.badge}>
+                  <Ionicons name="notifications-outline" size={12} color={Palette.amber} />
+                  <Text style={styles.badgeText}>Reminder</Text>
+                </View>
+              ) : null}
+              <Text style={styles.metaTiny}>{meta.label}</Text>
+            </View>
+          </View>
+          <Pressable onPress={onEdit} hitSlop={8} style={styles.iconBtn}>
+            <Ionicons name="pencil-outline" size={18} color={Palette.textMuted} />
+          </Pressable>
+          <Pressable onPress={onDelete} hitSlop={8} style={styles.iconBtn}>
+            <Ionicons name="trash-outline" size={18} color={Palette.coral} />
+          </Pressable>
+        </View>
+
+        <Text style={styles.amounts}>
+          {formatAud(goal.current_aud)}
+          <Text style={styles.amountsOf}> of {formatAud(goal.target_aud)}</Text>
+        </Text>
+
+        <View style={styles.track}>
+          <View style={[styles.fill, { width: `${pct}%` as `${number}%`, backgroundColor: accent }]} />
+        </View>
+        <Text style={[styles.pct, { color: accent }]}>{pct}% complete</Text>
+
+        {Number.isFinite(eta.months) && eta.months > 0 ? (
+          <View style={styles.etaBox}>
+            <Ionicons name="time-outline" size={16} color={Palette.textMuted} />
+            <Text style={styles.etaText}>You’d arrive around {eta.arriveLabel}</Text>
+          </View>
+        ) : eta.reached ? (
+          <View style={styles.etaBox}>
+            <Ionicons name="checkmark-circle-outline" size={16} color={Palette.teal} />
+            <Text style={styles.etaText}>Goal reached</Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.contribMeta}>
+          {formatAud(goal.contribution_aud)} {goal.contribution_frequency}
+          {goal.reminder ? ' · reminder on' : ''}
+        </Text>
+
+        <Pressable
+          onPress={onContribute}
+          style={({ pressed }) => [
+            styles.contributeBtn,
+            { backgroundColor: SectionAccents.contribute },
+            pressed && { opacity: 0.9 },
+          ]}>
+          <Ionicons name="add" size={18} color={Palette.void} />
+          <Text style={styles.contributeLabel}>Record real contribution</Text>
+        </Pressable>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
+    gap: Spacing.md,
+  },
+  kicker: {
+    color: Palette.cyan,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
   title: {
     color: Palette.text,
     fontFamily: Fonts.display,
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
   },
-  sub: { color: Palette.textMuted, marginBottom: Spacing.md, marginTop: 4 },
-  goal: { marginBottom: Spacing.sm, flexDirection: 'row', justifyContent: 'space-between' },
-  goalOn: { borderColor: Palette.cyan },
-  goalName: { color: Palette.text, fontWeight: '700' },
+  sub: { color: Palette.textMuted, marginTop: 2, fontSize: 13 },
+  fab: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FF9F6B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionLabel: {
+    color: SectionAccents.simulate,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 13,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  empty: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.xl,
+    backgroundColor: Palette.panel,
+    borderRadius: Radii.xl,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+  },
+  emptyTitle: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '800', fontSize: 18 },
+  emptySub: { color: Palette.textMuted, textAlign: 'center', marginBottom: Spacing.sm },
+  card: {
+    flexDirection: 'row',
+    backgroundColor: Palette.panel,
+    borderRadius: Radii.xl,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    overflow: 'hidden',
+  },
+  cardAccent: { width: 4 },
+  cardBody: { flex: 1, padding: Spacing.md, gap: 8 },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  iconBubble: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalName: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 18,
+  },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,200,87,0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radii.pill,
+  },
+  badgeText: { color: Palette.amber, fontSize: 10, fontWeight: '700' },
+  metaTiny: { color: Palette.textDim, fontSize: 11 },
+  iconBtn: { padding: 6 },
+  amounts: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 18,
+    marginTop: 4,
+  },
+  amountsOf: { color: Palette.textMuted, fontWeight: '600', fontSize: 14 },
+  track: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: Palette.panelElevated,
+    overflow: 'hidden',
+  },
+  fill: { height: '100%', borderRadius: 999 },
+  pct: { fontSize: 12, fontWeight: '700' },
+  etaBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Palette.panelElevated,
+    borderRadius: Radii.md,
+    padding: 10,
+  },
+  etaText: { color: Palette.textMuted, fontSize: 12, flex: 1 },
+  contribMeta: { color: Palette.textDim, fontSize: 12 },
+  contributeBtn: {
+    height: 48,
+    borderRadius: Radii.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  contributeLabel: {
+    color: Palette.void,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 14,
+  },
   input: {
     borderWidth: 1,
     borderColor: Palette.stroke,
     borderRadius: Radii.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     color: Palette.text,
     backgroundColor: Palette.panelElevated,
+    fontSize: 16,
+    marginTop: Spacing.sm,
   },
-  simResult: { color: Palette.teal, fontWeight: '700' },
 });

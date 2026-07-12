@@ -65,7 +65,23 @@ export const SHEET_HEADERS: Record<SheetName, string[]> = {
     'precio_unidad',
     'precio_total',
   ],
-  Ahorros: ['id', 'nombre', 'meta', 'actual', 'fecha_limite', 'quien', 'actualizado'],
+  Ahorros: [
+    'id',
+    'nombre',
+    'meta',
+    'actual',
+    'fecha_limite',
+    'quien',
+    'categoria',
+    'color',
+    'plan',
+    'aporte',
+    'frecuencia',
+    'rentabilidad',
+    'tasa',
+    'recordatorio',
+    'actualizado',
+  ],
 
   // ——— System (do not edit by hand) ———
   _sys_recibos: [
@@ -130,6 +146,14 @@ export type AhorroRow = {
   fecha_limite: string;
   quien: string;
   actualizado: string;
+  categoria: string;
+  color: string;
+  plan: string;
+  aporte: number;
+  frecuencia: string;
+  rentabilidad: string;
+  tasa: number;
+  recordatorio: boolean;
 };
 
 export type UsuarioRow = { id: string; nombre: string; email: string; rol: string };
@@ -407,6 +431,14 @@ export function parseAhorroRows(values: string[][]): AhorroRow[] {
     fecha_limite: o.fecha_limite || o.deadline || '',
     quien: o.quien || '',
     actualizado: o.actualizado || o.updated_at || '',
+    categoria: o.categoria || o.kind || 'other',
+    color: o.color || '#3DE7FF',
+    plan: o.plan || o.plan_mode || 'contribution',
+    aporte: asNum(o.aporte) || asNum(o.contribution_aud),
+    frecuencia: o.frecuencia || o.contribution_frequency || 'monthly',
+    rentabilidad: o.rentabilidad || o.yield_mode || 'none',
+    tasa: asNum(o.tasa) || asNum(o.annual_rate),
+    recordatorio: asBool(o.recordatorio || o.reminder || 'no'),
   }));
 }
 
