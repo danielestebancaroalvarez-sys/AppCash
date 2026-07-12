@@ -11,6 +11,7 @@ import { SavingsSimWidget } from '@/components/savings/SavingsSimWidget';
 import { SectionAccents, savingsKindMeta } from '@/constants/savings';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
+import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { formatAud, parseAmount } from '@/lib/money';
 import { createId } from '@/lib/id';
 import { nowIso, todayIsoDate } from '@/lib/dates';
@@ -25,6 +26,7 @@ export default function SavingsScreen() {
   const categories = useFinanceStore((s) => s.categories);
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, confirm, Dialog } = useAppDialog();
+  const { refreshing, onRefresh } = useSheetRefresh();
 
   const [focusGoalId, setFocusGoalId] = useState<string | null>(null);
   const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
@@ -92,12 +94,12 @@ export default function SavingsScreen() {
   };
 
   return (
-    <Screen>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>Household</Text>
           <Text style={styles.title}>Savings</Text>
-          <Text style={styles.sub}>Goals & progress</Text>
+          <Text style={styles.sub}>Goals & progress · pull to sync Sheet</Text>
         </View>
         <Pressable
           onPress={() => router.push('/savings/edit' as never)}

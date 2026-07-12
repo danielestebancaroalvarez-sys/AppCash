@@ -59,6 +59,8 @@ export function Screen({
                   refreshing={refreshing}
                   onRefresh={onRefresh}
                   tintColor={Palette.cyan}
+                  colors={[Palette.cyan]}
+                  progressBackgroundColor={Palette.panelElevated}
                 />
               ) : undefined
             }>

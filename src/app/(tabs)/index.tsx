@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { format, eachDayOfInterval } from 'date-fns';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { AmountText, GlassPanel, SectionTitle } from '@/components/ui/Primitives
 import { BarWeek, DonutChart } from '@/components/charts/FinanceCharts';
 import { Fonts, FinanceColors, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore, useWeekRange } from '@/stores/finance-store';
+import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { formatAud } from '@/lib/money';
 import { inRange } from '@/lib/dates';
 import { recommendUpcoming, recomputeProductStats } from '@/lib/insights/market';
@@ -20,12 +21,12 @@ export default function DashboardScreen() {
   const users = useFinanceStore((s) => s.users);
   const productStats = useFinanceStore((s) => s.productStats);
   const shiftWeekBy = useFinanceStore((s) => s.shiftWeekBy);
-  const runSync = useFinanceStore((s) => s.runSync);
-  const refresh = useFinanceStore((s) => s.refresh);
   const syncMessage = useFinanceStore((s) => s.syncMessage);
   const session = useFinanceStore((s) => s.session);
   const { start, end, label } = useWeekRange();
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = useSheetRefresh(async () => {
+    await recomputeProductStats();
+  });
 
   const stats = useMemo(() => {
     const weekTx = transactions.filter((t) => inRange(t.date, start, end));
@@ -76,17 +77,6 @@ export default function DashboardScreen() {
 
   const upcoming = recommendUpcoming(productStats, 14).slice(0, 4);
   const trackedCount = productStats.length;
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await recomputeProductStats();
-      await runSync();
-      await refresh();
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>

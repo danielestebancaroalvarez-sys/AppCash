@@ -6,6 +6,7 @@ import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primiti
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
+import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import {
   getDeepSeekApiKey,
   getGeminiApiKey,
@@ -56,6 +57,7 @@ export default function SettingsScreen() {
   const runSync = useFinanceStore((s) => s.runSync);
   const setSession = useFinanceStore((s) => s.setSession);
   const { alert, confirm, Dialog } = useAppDialog();
+  const { refreshing, onRefresh } = useSheetRefresh();
 
   const [provider, setProvider] = useState<ReceiptAiProvider>('openrouter');
   const [openrouter, setOpenrouter] = useState('');
@@ -191,11 +193,12 @@ export default function SettingsScreen() {
   };
 
   return (
-    <Screen>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <Text style={styles.title}>Settings</Text>
       <Text style={styles.sub}>
         {session?.email ?? 'Not signed in'} · Last sync:{' '}
         {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : 'never'}
+        {' · '}pull to sync Sheet
       </Text>
 
       <SectionTitle

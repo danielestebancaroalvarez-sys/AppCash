@@ -9,6 +9,7 @@ import { useAppDialog } from '@/components/ui/useAppDialog';
 import { categoryIonicon } from '@/constants/category-icons';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
+import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { createId } from '@/lib/id';
 import { nowIso, todayIsoDate } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
@@ -57,6 +58,7 @@ export default function AddScreen() {
   const session = useFinanceStore((s) => s.session);
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, confirm, Dialog } = useAppDialog();
+  const { refreshing, onRefresh } = useSheetRefresh();
   const [mode, setMode] = useState<AddMode>('expense');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -191,7 +193,7 @@ export default function AddScreen() {
   };
 
   return (
-    <Screen>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <View style={styles.header}>
         <View style={[styles.heroIcon, { backgroundColor: `${modeMeta.color}22` }]}>
           <Ionicons name={modeMeta.ion} size={28} color={modeMeta.color} />

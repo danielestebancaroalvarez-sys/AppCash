@@ -4,6 +4,7 @@ import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, SectionTitle } from '@/components/ui/Primitives';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
+import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { formatAud } from '@/lib/money';
 import { formatDisplayDate } from '@/lib/dates';
 
@@ -13,6 +14,7 @@ export default function SearchScreen() {
   const categories = useFinanceStore((s) => s.categories);
   const [q, setQ] = useState('');
   const [userFilter, setUserFilter] = useState<string>('all');
+  const { refreshing, onRefresh } = useSheetRefresh();
 
   const rows = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -29,7 +31,7 @@ export default function SearchScreen() {
   }, [transactions, q, userFilter, users, categories]);
 
   return (
-    <Screen>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <Text style={styles.title}>Search ledger</Text>
       <TextInput
         value={q}
