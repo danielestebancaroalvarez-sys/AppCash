@@ -11,6 +11,7 @@ import {
   type MarketCategory,
   MARKET_CATEGORIES,
 } from '@/lib/insights/categories';
+import { isReceiptNoiseLine } from '@/lib/purchases/filter';
 
 export type ProductInsight = {
   id: string;
@@ -84,8 +85,9 @@ export async function recomputeProductStats(): Promise<ProductStat[]> {
   >();
 
   for (const item of items) {
+    if (isReceiptNoiseLine(item.name)) continue;
     const key = normalizeProductName(item.name);
-    if (!key) continue;
+    if (!key || isReceiptNoiseLine(key)) continue;
     const date = receiptDate.get(item.receipt_id) ?? item.updated_at.slice(0, 10);
     const g = groups.get(key) ?? { prices: [], dates: [], display: item.name };
     g.prices.push(item.unit_price_aud || item.line_total_aud);
@@ -157,8 +159,9 @@ export function buildMarketDashboard(
 
   const groups = new Map<string, Acc>();
   for (const item of items) {
+    if (isReceiptNoiseLine(item.name)) continue;
     const key = normalizeProductName(item.name);
-    if (!key) continue;
+    if (!key || isReceiptNoiseLine(key)) continue;
     const date = receiptDate.get(item.receipt_id) ?? item.updated_at.slice(0, 10);
     const g =
       groups.get(key) ??

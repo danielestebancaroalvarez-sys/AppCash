@@ -24,7 +24,7 @@ import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { formatAud } from '@/lib/money';
-import { getWeekRange, inRange } from '@/lib/dates';
+import { getWeekRange, inRange, normalizeReceiptDate } from '@/lib/dates';
 import { deleteTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
 import { exportTransactionsCsv } from '@/lib/excel/io';
@@ -61,7 +61,7 @@ export default function SearchScreen() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [categoryId, setCategoryId] = useState<string>('all');
   const [userId, setUserId] = useState<string>('all');
-  const [period, setPeriod] = useState<PeriodFilter>('this_week');
+  const [period, setPeriod] = useState<PeriodFilter>('all');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
@@ -111,7 +111,7 @@ export default function SearchScreen() {
       if (!includeSavings && t.type === 'savings_contrib') return false;
       if (categoryId !== 'all' && t.category_id !== categoryId) return false;
       if (userId !== 'all' && t.user_id !== userId) return false;
-      if (start && end && !inRange(t.date, start, end)) return false;
+      if (start && end && !inRange(normalizeReceiptDate(t.date), start, end)) return false;
       if (min != null && !Number.isNaN(min) && t.amount_aud < min) return false;
       if (max != null && !Number.isNaN(max) && t.amount_aud > max) return false;
       if (!query) return true;
@@ -137,7 +137,7 @@ export default function SearchScreen() {
     // Ensure scanned receipts appear even if parent tx was wiped by a bad sync
     if (typeFilter !== 'income') {
       for (const r of receipts) {
-        const date = r.purchased_at.slice(0, 10);
+        const date = normalizeReceiptDate(r.purchased_at);
         if (seenReceipts.has(r.id)) continue;
         if (start && end && !inRange(date, start, end)) continue;
         if (userId !== 'all' && r.user_id !== userId) continue;
@@ -307,6 +307,7 @@ export default function SearchScreen() {
         <View style={styles.periodRow}>
           {(
             [
+              ['all', 'All time'],
               ['this_week', 'This week'],
               ['last_week', 'Last week'],
               ['custom', 'Custom'],

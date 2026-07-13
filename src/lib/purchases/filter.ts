@@ -1,6 +1,10 @@
 const STORE_WORDS =
   /\b(kmart|metro|woolworths|coles|aldi|bunnings|costco|target|officeworks|big\s?w|harvey\s?norman|jb\s?hi|chemist|warehouse|iga|foodworks|asian\s?grocery|supermarket|petrol|bp|shell|7-?eleven|mcdonald|hungry\s?jack|kfc|subway)\b/i;
 
+/** Footer / payment lines that OCR often mistakes for products. */
+const RECEIPT_NOISE =
+  /^(sub\s*total|subtotal|total|gst|tax|vat|change|cash|card|eftpos|visa|mastercard|amex|amount\s*due|balance|rounding|you\s*saved|saving|savings|tender|paid|payment|debit|credit|loyalty|points|reward|receipt\s*(total|no|number)|items?\s*sold|thank\s*you|welcome)$/i;
+
 /** Real shop / merchant names we should keep in Top Merchants & Search. */
 export function isKnownStoreName(name: string): boolean {
   const n = (name || '').trim();
@@ -8,6 +12,15 @@ export function isKnownStoreName(name: string): boolean {
   if (STORE_WORDS.test(n)) return true;
   // Short proper store-like tokens (Metro, Kmart alone)
   if (/^(kmart|metro|coles|aldi|target|costco)$/i.test(n)) return true;
+  return false;
+}
+
+/** Receipt footer / total lines — never treat as products. */
+export function isReceiptNoiseLine(name: string): boolean {
+  const n = (name || '').trim().replace(/[:.]+$/g, '');
+  if (!n) return true;
+  if (RECEIPT_NOISE.test(n)) return true;
+  if (/^(sub\s*)?total(\s*(due|aud|incl|ex))?$/i.test(n)) return true;
   return false;
 }
 

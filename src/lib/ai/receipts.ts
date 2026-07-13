@@ -3,7 +3,8 @@ import * as SecureStore from 'expo-secure-store';
 import { Image } from 'react-native';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import type { ParsedReceipt } from '@/types/models';
-import { todayIsoDate } from '@/lib/dates';
+import { normalizeReceiptDate, todayIsoDate } from '@/lib/dates';
+import { isReceiptNoiseLine } from '@/lib/purchases/filter';
 
 /** Cascade providers (DeepSeek removed). Order is always Gemini → NVIDIA → OpenRouter. */
 export type ReceiptAiProvider = 'gemini' | 'nvidia' | 'openrouter';
@@ -66,7 +67,9 @@ Return ONLY valid JSON with this shape:
     }
   ]
 }
-Use AUD amounts. If date unknown use ${today}. Ignore loyalty points.`;
+Use AUD amounts. If date unknown use ${today}. Ignore loyalty points.
+Do NOT include footer lines as items: Total, Subtotal, GST, Tax, Change, Cash, Card, EFTPOS, Rounding, Amount Due, or payment method lines.
+Only real products/SKUs belong in "items". The receipt grand total goes ONLY in "total_aud".`;
 
 const PROVIDER_LABEL: Record<ReceiptAiProvider, string> = {
   gemini: 'Gemini',
@@ -268,17 +271,19 @@ async function readJsonBody<T>(res: Response, label: string): Promise<T> {
 function normalizeParsed(parsed: ParsedReceipt): ParsedReceipt {
   return {
     store: parsed.store || 'Unknown store',
-    purchased_at: parsed.purchased_at || todayIsoDate(),
+    purchased_at: normalizeReceiptDate(parsed.purchased_at || ''),
     total_aud: Number(parsed.total_aud) || 0,
-    items: (parsed.items || []).map((item) => ({
-      name: item.name || 'Item',
-      qty: Number(item.qty) || 1,
-      unit_price_aud: Number(item.unit_price_aud) || 0,
-      line_total_aud:
-        Number(item.line_total_aud) ||
-        (Number(item.unit_price_aud) || 0) * (Number(item.qty) || 1),
-      category_guess: item.category_guess || 'Groceries',
-    })),
+    items: (parsed.items || [])
+      .filter((item) => !isReceiptNoiseLine(item.name || ''))
+      .map((item) => ({
+        name: item.name || 'Item',
+        qty: Number(item.qty) || 1,
+        unit_price_aud: Number(item.unit_price_aud) || 0,
+        line_total_aud:
+          Number(item.line_total_aud) ||
+          (Number(item.unit_price_aud) || 0) * (Number(item.qty) || 1),
+        category_guess: item.category_guess || 'Groceries',
+      })),
   };
 }
 

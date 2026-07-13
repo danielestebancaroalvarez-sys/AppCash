@@ -9,7 +9,7 @@ import { Palette, Radii, Spacing } from '@/constants/theme';
 import type { ParsedReceipt } from '@/types/models';
 import { useFinanceStore } from '@/stores/finance-store';
 import { createId } from '@/lib/id';
-import { nowIso } from '@/lib/dates';
+import { normalizeReceiptDate, nowIso } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
 import {
   upsertReceipt,
@@ -18,6 +18,7 @@ import {
 } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
 import { recomputeProductStats } from '@/lib/insights/market';
+import { isReceiptNoiseLine } from '@/lib/purchases/filter';
 
 export default function ReceiptReviewScreen() {
   const { photoUri, draft } = useLocalSearchParams<{ photoUri?: string; draft?: string }>();
@@ -37,9 +38,11 @@ export default function ReceiptReviewScreen() {
   }, [draft]);
 
   const [store, setStore] = useState(initial.store || '');
-  const [date, setDate] = useState(initial.purchased_at || '');
+  const [date, setDate] = useState(normalizeReceiptDate(initial.purchased_at || ''));
   const [total, setTotal] = useState(String(initial.total_aud || ''));
-  const [items, setItems] = useState(initial.items || []);
+  const [items, setItems] = useState(
+    (initial.items || []).filter((item) => !isReceiptNoiseLine(item.name || ''))
+  );
   const [userId, setUserId] = useState(activeUserId || users[0]?.id || '');
 
   const updateItem = (index: number, patch: Partial<(typeof items)[number]>) => {
@@ -53,20 +56,22 @@ export default function ReceiptReviewScreen() {
       return;
     }
     const receiptId = createId();
+    const dateIso = normalizeReceiptDate(date);
+    const productItems = items.filter((item) => !isReceiptNoiseLine(item.name || ''));
     const receipt = {
       id: receiptId,
       user_id: userId,
-      store,
+      store: store.trim() || 'Store',
       total_aud: parseAmount(total),
       photo_uri_or_drive_id: photoUri ?? '',
-      purchased_at: date,
+      purchased_at: `${dateIso}T12:00:00`,
       raw_gemini_json: draft ?? '',
       updated_at: nowIso(),
     };
     await upsertReceipt(receipt);
     await queueMutation('receipts', receipt);
 
-    for (const item of items) {
+    for (const item of productItems) {
       const row = {
         id: createId(),
         receipt_id: receiptId,
@@ -82,14 +87,14 @@ export default function ReceiptReviewScreen() {
     }
 
     const tx = {
-      id: createId(),
+      id: `tx_${receiptId}`,
       user_id: userId,
       type: 'expense_sporadic' as const,
       category_id: grocery.id,
-      amount_aud: parseAmount(total) || items.reduce((a, i) => a + i.line_total_aud, 0),
-      date: date.slice(0, 10),
-      note: `Receipt ${store}`,
-      merchant: store,
+      amount_aud: parseAmount(total) || productItems.reduce((a, i) => a + i.line_total_aud, 0),
+      date: dateIso,
+      note: `Receipt ${store.trim() || 'Store'}`,
+      merchant: store.trim() || 'Store',
       receipt_id: receiptId,
       created_at: nowIso(),
       updated_at: nowIso(),

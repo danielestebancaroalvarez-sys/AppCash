@@ -19,6 +19,40 @@ export function todayIsoDate(): string {
   return format(new Date(), 'yyyy-MM-dd');
 }
 
+/**
+ * Normalize OCR dates to YYYY-MM-DD.
+ * Accepts ISO, DD/MM/YYYY (AU), and clamps future dates to today.
+ */
+export function normalizeReceiptDate(raw: string, fallback = todayIsoDate()): string {
+  const s = (raw || '').trim();
+  if (!s) return fallback;
+
+  let iso = '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    iso = s.slice(0, 10);
+  } else {
+    const au = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
+    if (au) {
+      const day = au[1].padStart(2, '0');
+      const month = au[2].padStart(2, '0');
+      let year = au[3];
+      if (year.length === 2) year = `20${year}`;
+      iso = `${year}-${month}-${day}`;
+    } else {
+      // "26 Jul 2026" / "Jul 26, 2026"
+      const parsed = Date.parse(s);
+      if (!Number.isNaN(parsed)) {
+        iso = format(new Date(parsed), 'yyyy-MM-dd');
+      }
+    }
+  }
+
+  if (!iso || Number.isNaN(Date.parse(`${iso}T12:00:00`))) return fallback;
+  // OCR often invents a future year/day — keep purchases on/before today
+  if (iso > fallback) return fallback;
+  return iso;
+}
+
 export function formatDisplayDate(iso: string): string {
   try {
     return format(parseISO(iso.length === 10 ? `${iso}T00:00:00` : iso), 'dd MMM yyyy');
