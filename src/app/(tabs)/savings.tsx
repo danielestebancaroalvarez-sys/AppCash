@@ -8,7 +8,7 @@ import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
 import { PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { SavingsSimWidget } from '@/components/savings/SavingsSimWidget';
-import { SectionAccents, savingsKindMeta } from '@/constants/savings';
+import { resolveSavingsCardColor, SectionAccents, savingsKindMeta } from '@/constants/savings';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
@@ -119,23 +119,30 @@ export default function SavingsScreen() {
         </View>
       ) : (
         <>
-          {goals.map((goal) => (
-            <GoalCard
-              key={goal.id}
-              goal={goal}
-              focused={focusGoalId === goal.id}
-              onFocus={() => setFocusGoalId(goal.id)}
-              onContribute={() => {
-                setContributeGoal(goal);
-                setContributeAmt('');
-                setFocusGoalId(goal.id);
-              }}
-              onEdit={() =>
-                router.push({ pathname: '/savings/edit' as never, params: { id: goal.id } })
-              }
-              onDelete={() => removeGoal(goal)}
-            />
-          ))}
+          {(() => {
+            const used = new Set<string>();
+            return goals.map((goal, index) => {
+              const accent = resolveSavingsCardColor(goal, index, used);
+              return (
+                <GoalCard
+                  key={goal.id}
+                  goal={goal}
+                  accent={accent}
+                  focused={focusGoalId === goal.id}
+                  onFocus={() => setFocusGoalId(goal.id)}
+                  onContribute={() => {
+                    setContributeGoal(goal);
+                    setContributeAmt('');
+                    setFocusGoalId(goal.id);
+                  }}
+                  onEdit={() =>
+                    router.push({ pathname: '/savings/edit' as never, params: { id: goal.id } })
+                  }
+                  onDelete={() => removeGoal(goal)}
+                />
+              );
+            });
+          })()}
 
           <Text style={styles.sectionLabel}>Simulation</Text>
           <SavingsSimWidget
@@ -175,6 +182,7 @@ export default function SavingsScreen() {
 
 function GoalCard({
   goal,
+  accent,
   focused,
   onFocus,
   onContribute,
@@ -182,6 +190,7 @@ function GoalCard({
   onDelete,
 }: {
   goal: SavingsGoal;
+  accent: string;
   focused: boolean;
   onFocus: () => void;
   onContribute: () => void;
@@ -189,7 +198,6 @@ function GoalCard({
   onDelete: () => void;
 }) {
   const meta = savingsKindMeta(goal.kind, goal.icon);
-  const accent = goal.color || meta.color;
   const progress = Math.min(1, goal.current_aud / Math.max(goal.target_aud, 1));
   const pct = Math.round(progress * 100);
 
@@ -210,7 +218,7 @@ function GoalCard({
     <CollapsibleWidget
       accent={accent}
       defaultExpanded
-      style={focused ? { borderColor: accent, backgroundColor: `${accent}10` } : undefined}
+      style={focused ? { borderColor: accent, backgroundColor: `${accent}12` } : undefined}
       onHeaderPress={onFocus}
       header={
         <>
@@ -221,12 +229,12 @@ function GoalCard({
             <Text style={styles.goalName}>{goal.name}</Text>
             <View style={styles.badgeRow}>
               {goal.reminder ? (
-                <View style={styles.badge}>
-                  <Ionicons name="notifications-outline" size={12} color={Palette.amber} />
-                  <Text style={styles.badgeText}>Reminder</Text>
+                <View style={[styles.badge, { backgroundColor: `${accent}22` }]}>
+                  <Ionicons name="notifications-outline" size={12} color={accent} />
+                  <Text style={[styles.badgeText, { color: accent }]}>Reminder</Text>
                 </View>
               ) : null}
-              <Text style={styles.metaTiny}>{meta.label}</Text>
+              <Text style={[styles.metaTiny, { color: `${accent}CC` }]}>{meta.label}</Text>
             </View>
           </View>
         </>
@@ -234,10 +242,10 @@ function GoalCard({
       headerActions={
         <>
           <Pressable onPress={onEdit} hitSlop={8} style={styles.iconBtn}>
-            <Ionicons name="pencil-outline" size={18} color={Palette.textMuted} />
+            <Ionicons name="pencil-outline" size={18} color={accent} />
           </Pressable>
           <Pressable onPress={onDelete} hitSlop={8} style={styles.iconBtn}>
-            <Ionicons name="trash-outline" size={18} color={Palette.coral} />
+            <Ionicons name="trash-outline" size={18} color={accent} />
           </Pressable>
         </>
       }
@@ -255,24 +263,30 @@ function GoalCard({
         <Text style={styles.amountsOf}> of {formatAud(goal.target_aud)}</Text>
       </Text>
 
-      <View style={styles.track}>
+      <View style={[styles.track, { backgroundColor: `${accent}22` }]}>
         <View style={[styles.fill, { width: `${pct}%` as `${number}%`, backgroundColor: accent }]} />
       </View>
       <Text style={[styles.pct, { color: accent }]}>{pct}% complete</Text>
 
       {Number.isFinite(eta.months) && eta.months > 0 ? (
-        <View style={styles.etaBox}>
-          <Ionicons name="time-outline" size={16} color={Palette.textMuted} />
-          <Text style={styles.etaText}>You’d arrive around {eta.arriveLabel}</Text>
+        <View style={[styles.etaBox, { backgroundColor: `${accent}18`, borderColor: `${accent}55` }]}>
+          <Ionicons name="time-outline" size={20} color={accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.etaLabel, { color: accent }]}>Estimated arrival</Text>
+            <Text style={styles.etaText}>{eta.arriveLabel}</Text>
+          </View>
         </View>
       ) : eta.reached ? (
-        <View style={styles.etaBox}>
-          <Ionicons name="checkmark-circle-outline" size={16} color={Palette.teal} />
-          <Text style={styles.etaText}>Goal reached</Text>
+        <View style={[styles.etaBox, { backgroundColor: `${accent}18`, borderColor: `${accent}55` }]}>
+          <Ionicons name="checkmark-circle" size={20} color={accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.etaLabel, { color: accent }]}>Status</Text>
+            <Text style={styles.etaText}>Goal reached</Text>
+          </View>
         </View>
       ) : null}
 
-      <Text style={styles.contribMeta}>
+      <Text style={[styles.contribMeta, { color: `${accent}BB` }]}>
         {formatAud(goal.contribution_aud)} {goal.contribution_frequency}
         {goal.reminder ? ' · reminder on' : ''}
       </Text>
@@ -359,13 +373,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255,200,87,0.12)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: Radii.pill,
   },
-  badgeText: { color: Palette.amber, fontSize: 10, fontWeight: '700' },
-  metaTiny: { color: Palette.textDim, fontSize: 11 },
+  badgeText: { fontSize: 10, fontWeight: '700' },
+  metaTiny: { fontSize: 11, fontWeight: '600' },
   iconBtn: { padding: 6 },
   collapsedRow: {
     flexDirection: 'row',
@@ -388,7 +401,6 @@ const styles = StyleSheet.create({
   track: {
     height: 10,
     borderRadius: 999,
-    backgroundColor: Palette.panelElevated,
     overflow: 'hidden',
   },
   fill: { height: '100%', borderRadius: 999 },
@@ -396,13 +408,26 @@ const styles = StyleSheet.create({
   etaBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: Palette.panelElevated,
+    gap: 10,
     borderRadius: Radii.md,
-    padding: 10,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
   },
-  etaText: { color: Palette.textMuted, fontSize: 12, flex: 1 },
-  contribMeta: { color: Palette.textDim, fontSize: 12 },
+  etaLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  etaText: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  contribMeta: { fontSize: 12, fontWeight: '600' },
   contributeBtn: {
     height: 48,
     borderRadius: Radii.pill,
