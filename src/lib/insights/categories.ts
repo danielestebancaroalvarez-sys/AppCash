@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { CategoryPalette } from '@/constants/theme';
 
 /** Canonical buckets for market prediction (supermarket + Kmart + tech). */
@@ -574,4 +575,33 @@ export function categorizeProduct(name: string, categoryGuess = ''): MarketCateg
 export function marketCategoryColor(category: MarketCategory, index = 0): string {
   const i = MARKET_CATEGORIES.indexOf(category);
   return CategoryPalette[(i >= 0 ? i : index) % CategoryPalette.length];
+}
+
+/** Ionicons glyph for market prediction categories. */
+export function marketCategoryIonicon(
+  category: MarketCategory | string
+): keyof typeof Ionicons.glyphMap {
+  const map: Record<MarketCategory, keyof typeof Ionicons.glyphMap> = {
+    Dairy: 'nutrition-outline',
+    'Meat & deli': 'fish-outline',
+    Produce: 'leaf-outline',
+    Bakery: 'cafe-outline',
+    Frozen: 'snow-outline',
+    Drinks: 'water-outline',
+    Snacks: 'pizza-outline',
+    Pantry: 'basket-outline',
+    Cleaning: 'sparkles-outline',
+    'Personal care': 'body-outline',
+    Pet: 'paw-outline',
+    Baby: 'happy-outline',
+    Technology: 'laptop-outline',
+    'Home & kitchen': 'home-outline',
+    Clothing: 'shirt-outline',
+    Stationery: 'document-text-outline',
+    'Toys & games': 'game-controller-outline',
+    'Sports & outdoors': 'bicycle-outline',
+    Storage: 'archive-outline',
+    Other: 'cube-outline',
+  };
+  return map[category as MarketCategory] ?? 'cube-outline';
 }

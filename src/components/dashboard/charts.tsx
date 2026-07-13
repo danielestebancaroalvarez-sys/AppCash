@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Rect } from 'react-native-svg';
 import { Fonts, Palette, Spacing } from '@/constants/theme';
 import { formatAud, formatAudShort } from '@/lib/money';
@@ -80,7 +81,12 @@ export function DashboardDonut({
 export function CategoryBars({
   items,
 }: {
-  items: Array<{ label: string; value: number; color: string }>;
+  items: Array<{
+    label: string;
+    value: number;
+    color: string;
+    icon?: keyof typeof Ionicons.glyphMap;
+  }>;
 }) {
   const max = Math.max(...items.map((i) => i.value), 1);
   return (
@@ -88,7 +94,14 @@ export function CategoryBars({
       {items.map((item) => (
         <View key={item.label} style={styles.catRow}>
           <View style={styles.catHead}>
-            <Text style={styles.catLabel}>{item.label}</Text>
+            <View style={styles.catLabelRow}>
+              {item.icon ? (
+                <View style={[styles.catBarIcon, { backgroundColor: `${item.color}28` }]}>
+                  <Ionicons name={item.icon} size={12} color={item.color} />
+                </View>
+              ) : null}
+              <Text style={styles.catLabel}>{item.label}</Text>
+            </View>
             <Text style={styles.catAmt}>{formatAud(item.value)}</Text>
           </View>
           <View style={styles.track}>
@@ -243,7 +256,15 @@ const styles = StyleSheet.create({
   catList: { gap: 12 },
   catRow: { gap: 6 },
   catHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  catLabel: { color: Palette.text, fontWeight: '600', fontSize: 13 },
+  catLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, paddingRight: 8 },
+  catBarIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catLabel: { color: Palette.text, fontWeight: '600', fontSize: 13, flexShrink: 1 },
   catAmt: { color: Palette.text, fontWeight: '700', fontSize: 13 },
   track: {
     height: 8,

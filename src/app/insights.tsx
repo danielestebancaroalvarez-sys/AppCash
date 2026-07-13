@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
 import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
@@ -17,7 +18,11 @@ import {
   recomputeProductStats,
   type ProductInsight,
 } from '@/lib/insights/market';
-import { MARKET_CATEGORIES, type MarketCategory } from '@/lib/insights/categories';
+import {
+  marketCategoryColor,
+  marketCategoryIonicon,
+  type MarketCategory,
+} from '@/lib/insights/categories';
 
 type Filter = 'all' | MarketCategory;
 
@@ -27,6 +32,7 @@ export default function InsightsScreen() {
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, Dialog } = useAppDialog();
   const [filter, setFilter] = useState<Filter>('all');
+  const [expandedCategory, setExpandedCategory] = useState<MarketCategory | null>(null);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -41,22 +47,32 @@ export default function InsightsScreen() {
     [receipts, receiptItems]
   );
 
-  const filteredProducts = useMemo(() => {
-    const list = filter === 'all' ? dash.products : dash.products.filter((p) => p.category === filter);
-    return list;
-  }, [dash.products, filter]);
-
-  const grouped = useMemo(() => {
+  const productsByCategory = useMemo(() => {
     const map = new Map<MarketCategory, ProductInsight[]>();
-    for (const p of filteredProducts) {
+    for (const p of dash.products) {
       const list = map.get(p.category) ?? [];
       list.push(p);
       map.set(p.category, list);
     }
-    return MARKET_CATEGORIES.map((c) => ({ category: c, items: map.get(c) ?? [] })).filter(
-      (g) => g.items.length > 0
-    );
-  }, [filteredProducts]);
+    return map;
+  }, [dash.products]);
+
+  const visibleCategories = useMemo(() => {
+    return dash.categories.filter((c) => filter === 'all' || filter === c.category);
+  }, [dash.categories, filter]);
+
+  const onSelectFilter = (next: Filter) => {
+    setFilter(next);
+    if (next === 'all') {
+      setExpandedCategory(null);
+    } else {
+      setExpandedCategory(next);
+    }
+  };
+
+  const toggleCategory = (category: MarketCategory) => {
+    setExpandedCategory((prev) => (prev === category ? null : category));
+  };
 
   const onExport = async () => {
     const list = dash.predictiveList.length ? dash.predictiveList : dash.dueSoon;
@@ -91,6 +107,11 @@ export default function InsightsScreen() {
       </Screen>
     );
   }
+
+  const spendBars = dash.spendByCategory.map((c) => ({
+    ...c,
+    icon: marketCategoryIonicon(c.label),
+  }));
 
   return (
     <Screen>
@@ -140,7 +161,7 @@ export default function InsightsScreen() {
             </Text>
           }>
           <DonutChart segments={dash.spendByCategory.slice(0, 6)} centerLabel="Market" />
-          <CategoryBars items={dash.spendByCategory} />
+          <CategoryBars items={spendBars} />
         </CollapsibleWidget>
       ) : null}
 
@@ -224,55 +245,82 @@ export default function InsightsScreen() {
 
       <CollapsibleWidget
         accent={Palette.cyan}
-        defaultExpanded={false}
+        defaultExpanded
         header={
           <WidgetTitle icon="grid-outline" title="By category" iconColor={Palette.cyan} />
         }
         collapsedSummary={
           <Text style={styles.summary}>
-            {dash.categories.length} categories · filter and browse products
+            {dash.categories.length} categories · tap one to see products
           </Text>
         }>
-        <View style={styles.chips}>
-          <Chip label="All" on={filter === 'all'} onPress={() => setFilter('all')} />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}>
+          <Chip
+            label="All"
+            icon="apps-outline"
+            on={filter === 'all'}
+            onPress={() => onSelectFilter('all')}
+          />
           {dash.categories.map((c) => (
             <Chip
               key={c.category}
               label={`${c.category} (${c.productCount})`}
+              icon={marketCategoryIonicon(c.category)}
               on={filter === c.category}
-              onPress={() => setFilter(c.category)}
+              onPress={() => onSelectFilter(c.category)}
               color={c.color}
             />
           ))}
-        </View>
+        </ScrollView>
 
-        {dash.categories
-          .filter((c) => filter === 'all' || filter === c.category)
-          .map((c) => (
-            <View key={c.category} style={styles.catCard}>
-              <View style={styles.catHead}>
-                <View style={[styles.catDot, { backgroundColor: c.color }]} />
-                <Text style={styles.catTitle}>{c.category}</Text>
-                <Text style={styles.catAmt}>{formatAud(c.totalSpent)}</Text>
-              </View>
-              <Text style={styles.meta}>
-                {c.productCount} product{c.productCount === 1 ? '' : 's'}
-                {c.avgFrequencyDays != null
-                  ? ` · avg every ~${c.avgFrequencyDays}d`
-                  : ' · need repeats for frequency'}
-                {c.topProduct ? ` · top: ${c.topProduct}` : ''}
-              </Text>
+        <Text style={styles.hint}>Tap a category to expand its products.</Text>
+
+        {visibleCategories.map((c) => {
+          const open = expandedCategory === c.category;
+          const items = productsByCategory.get(c.category) ?? [];
+          return (
+            <View key={c.category} style={styles.catBlock}>
+              <Pressable
+                onPress={() => toggleCategory(c.category)}
+                style={({ pressed }) => [styles.catCard, pressed && { opacity: 0.9 }]}>
+                <View style={[styles.catIcon, { backgroundColor: `${c.color}28` }]}>
+                  <Ionicons name={marketCategoryIonicon(c.category)} size={18} color={c.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.catTitle}>{c.category}</Text>
+                  <Text style={styles.meta}>
+                    {c.productCount} product{c.productCount === 1 ? '' : 's'}
+                    {c.avgFrequencyDays != null
+                      ? ` · avg every ~${c.avgFrequencyDays}d`
+                      : ' · need repeats for frequency'}
+                    {c.topProduct ? ` · top: ${c.topProduct}` : ''}
+                  </Text>
+                </View>
+                <Text style={[styles.catAmt, { color: c.color }]}>{formatAud(c.totalSpent)}</Text>
+                <Ionicons
+                  name={open ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={c.color}
+                />
+              </Pressable>
+
+              {open ? (
+                <View style={styles.catProducts}>
+                  {items.length ? (
+                    items.map((p) => (
+                      <ProductRow key={p.id} product={p} showGaps showSpend hideCategoryTag />
+                    ))
+                  ) : (
+                    <Text style={styles.meta}>No products in this category.</Text>
+                  )}
+                </View>
+              ) : null}
             </View>
-          ))}
-
-        {grouped.map((g) => (
-          <View key={g.category} style={styles.groupBlock}>
-            <Text style={styles.groupTitle}>{g.category}</Text>
-            {g.items.map((p) => (
-              <ProductRow key={p.id} product={p} showGaps showSpend />
-            ))}
-          </View>
-        ))}
+          );
+        })}
       </CollapsibleWidget>
 
       {Dialog}
@@ -296,19 +344,23 @@ function Chip({
   on,
   onPress,
   color,
+  icon,
 }: {
   label: string;
   on: boolean;
   onPress: () => void;
   color?: string;
+  icon: keyof typeof Ionicons.glyphMap;
 }) {
+  const accent = color ?? Palette.cyan;
   return (
     <Pressable
       onPress={onPress}
       style={[
         styles.chip,
-        on && { borderColor: color ?? Palette.cyan, backgroundColor: `${color ?? Palette.cyan}22` },
+        on && { borderColor: accent, backgroundColor: `${accent}22` },
       ]}>
+      <Ionicons name={icon} size={14} color={on ? accent : Palette.textMuted} />
       <Text style={[styles.chipText, on && { color: Palette.text }]}>{label}</Text>
     </Pressable>
   );
@@ -319,11 +371,13 @@ function ProductRow({
   highlight,
   showGaps,
   showSpend,
+  hideCategoryTag,
 }: {
   product: ProductInsight;
   highlight?: boolean;
   showGaps?: boolean;
   showSpend?: boolean;
+  hideCategoryTag?: boolean;
 }) {
   const dueLabel =
     product.daysUntilDue < 0
@@ -331,6 +385,7 @@ function ProductRow({
       : product.daysUntilDue === 0
         ? 'due today'
         : `due in ${product.daysUntilDue}d`;
+  const catColor = marketCategoryColor(product.category);
 
   return (
     <View style={[styles.row, highlight && styles.rowHighlight]}>
@@ -339,7 +394,12 @@ function ProductRow({
           <Text style={styles.name} numberOfLines={2}>
             {product.name}
           </Text>
-          <Text style={styles.catTag}>{product.category}</Text>
+          {!hideCategoryTag ? (
+            <View style={[styles.catTag, { backgroundColor: `${catColor}22` }]}>
+              <Ionicons name={marketCategoryIonicon(product.category)} size={10} color={catColor} />
+              <Text style={[styles.catTagText, { color: catColor }]}>{product.category}</Text>
+            </View>
+          ) : null}
         </View>
         <Text style={styles.meta}>
           {product.frequencyEstimated
@@ -384,9 +444,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   summary: { color: Palette.textDim, fontSize: 12 },
-  hint: { color: Palette.textDim, fontSize: 12, lineHeight: 16, marginBottom: 4 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  hint: { color: Palette.textDim, fontSize: 12, lineHeight: 16, marginBottom: 8, marginTop: 4 },
+  chips: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderWidth: 1,
     borderColor: Palette.stroke,
     borderRadius: Radii.pill,
@@ -395,23 +458,31 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.panelElevated,
   },
   chipText: { color: Palette.textMuted, fontSize: 12, fontWeight: '700' },
-  catCard: {
-    gap: 4,
-    paddingVertical: 8,
+  catBlock: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Palette.stroke,
   },
-  catHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  catDot: { width: 8, height: 8, borderRadius: 4 },
-  catTitle: { color: Palette.text, fontWeight: '800', flex: 1 },
-  catAmt: { color: Palette.cyan, fontWeight: '800' },
-  groupBlock: { marginTop: 4 },
-  groupTitle: {
-    color: Palette.textDim,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+  catCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+  },
+  catIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catTitle: { color: Palette.text, fontWeight: '800', fontSize: 14 },
+  catAmt: { fontWeight: '800', marginRight: 4 },
+  catProducts: {
+    paddingLeft: 8,
+    paddingBottom: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: Palette.stroke,
+    marginLeft: 18,
     marginBottom: 4,
   },
   row: {
@@ -431,15 +502,14 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   name: { color: Palette.text, fontWeight: '700', flex: 1 },
   catTag: {
-    color: Palette.textDim,
-    fontSize: 10,
-    fontWeight: '700',
-    backgroundColor: Palette.panelElevated,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    overflow: 'hidden',
   },
+  catTagText: { fontSize: 10, fontWeight: '700' },
   meta: { color: Palette.textDim, fontSize: 12, marginTop: 3, lineHeight: 16 },
   price: { color: Palette.cyan, fontWeight: '800', marginTop: 2 },
 });
