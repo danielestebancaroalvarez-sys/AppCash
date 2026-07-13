@@ -153,6 +153,7 @@ async function migrateSavingsGoalColumns(db: SQLite.SQLiteDatabase): Promise<voi
     `ALTER TABLE savings_goals ADD COLUMN yield_mode TEXT NOT NULL DEFAULT 'none'`,
     `ALTER TABLE savings_goals ADD COLUMN annual_rate REAL NOT NULL DEFAULT 0`,
     `ALTER TABLE savings_goals ADD COLUMN reminder INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE savings_goals ADD COLUMN icon TEXT NOT NULL DEFAULT ''`,
   ];
   for (const sql of alters) {
     try {
@@ -199,6 +200,11 @@ export async function upsertUser(user: AppUser): Promise<void> {
 export async function listUsers(): Promise<AppUser[]> {
   const db = await getDb();
   return db.getAllAsync<AppUser>('SELECT * FROM users ORDER BY name ASC');
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM users WHERE id = ?', [id]);
 }
 
 export async function upsertCategory(c: Category): Promise<void> {
@@ -434,13 +440,13 @@ export async function upsertSavingsGoal(g: SavingsGoal): Promise<void> {
   await db.runAsync(
     `INSERT INTO savings_goals (
       id, name, target_aud, current_aud, deadline, user_id, updated_at,
-      kind, color, plan_mode, contribution_aud, contribution_frequency,
+      kind, color, icon, plan_mode, contribution_aud, contribution_frequency,
       yield_mode, annual_rate, reminder
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name, target_aud=excluded.target_aud, current_aud=excluded.current_aud,
        deadline=excluded.deadline, user_id=excluded.user_id, updated_at=excluded.updated_at,
-       kind=excluded.kind, color=excluded.color, plan_mode=excluded.plan_mode,
+       kind=excluded.kind, color=excluded.color, icon=excluded.icon, plan_mode=excluded.plan_mode,
        contribution_aud=excluded.contribution_aud,
        contribution_frequency=excluded.contribution_frequency,
        yield_mode=excluded.yield_mode, annual_rate=excluded.annual_rate,
@@ -455,6 +461,7 @@ export async function upsertSavingsGoal(g: SavingsGoal): Promise<void> {
       g.updated_at,
       g.kind,
       g.color,
+      g.icon || '',
       g.plan_mode,
       g.contribution_aud,
       g.contribution_frequency,
@@ -477,6 +484,7 @@ export async function listSavingsGoals(): Promise<SavingsGoal[]> {
     updated_at: string;
     kind?: string;
     color?: string;
+    icon?: string;
     plan_mode?: string;
     contribution_aud?: number;
     contribution_frequency?: string;
@@ -495,6 +503,7 @@ export async function listSavingsGoals(): Promise<SavingsGoal[]> {
     updated_at: r.updated_at,
     kind: (r.kind as SavingsGoal['kind']) || 'other',
     color: r.color || '#3DE7FF',
+    icon: r.icon || '',
     plan_mode: (r.plan_mode as SavingsGoal['plan_mode']) || 'contribution',
     contribution_aud: r.contribution_aud ?? 0,
     contribution_frequency:

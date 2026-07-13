@@ -188,7 +188,7 @@ function GoalCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const meta = savingsKindMeta(goal.kind);
+  const meta = savingsKindMeta(goal.kind, goal.icon);
   const accent = goal.color || meta.color;
   const progress = Math.min(1, goal.current_aud / Math.max(goal.target_aud, 1));
   const pct = Math.round(progress * 100);
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#FF9F6B',
+    backgroundColor: Palette.cyan,
     alignItems: 'center',
     justifyContent: 'center',
   },

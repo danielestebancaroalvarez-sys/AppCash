@@ -3,6 +3,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -16,6 +17,7 @@ import { Screen } from '@/components/ui/Screen';
 import { PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { SavingsProjectionChart } from '@/components/charts/SavingsChart';
+import { CATEGORY_ICON_OPTIONS } from '@/constants/category-icons';
 import { SAVINGS_KINDS, SectionAccents, savingsKindMeta } from '@/constants/savings';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -48,7 +50,10 @@ export default function SavingsEditScreen() {
 
   const existing = goals.find((g) => g.id === id);
   const [name, setName] = useState(existing?.name ?? '');
-  const [kind, setKind] = useState<SavingsGoalKind>(existing?.kind ?? 'emergency');
+  const [kind, setKind] = useState<SavingsGoalKind>(
+    existing?.kind === 'other' ? 'custom' : existing?.kind ?? 'emergency'
+  );
+  const [customIcon, setCustomIcon] = useState(existing?.icon || 'trophy');
   const [target, setTarget] = useState(existing ? String(existing.target_aud) : '');
   const [current, setCurrent] = useState(existing ? String(existing.current_aud) : '0');
   const [planMode, setPlanMode] = useState<SavingsPlanMode>(existing?.plan_mode ?? 'contribution');
@@ -67,7 +72,7 @@ export default function SavingsEditScreen() {
   const [reminder, setReminder] = useState(existing?.reminder ?? true);
   const [busy, setBusy] = useState(false);
 
-  const kindMeta = savingsKindMeta(kind);
+  const kindMeta = savingsKindMeta(kind, customIcon);
   const targetN = parseAmount(target);
   const currentN = parseAmount(current) || 0;
   const contribN = parseAmount(contribution) || 0;
@@ -123,7 +128,8 @@ export default function SavingsEditScreen() {
         user_id: user,
         updated_at: nowIso(),
         kind,
-        color: kindMeta.color,
+        color: kind === 'custom' ? Palette.cyan : kindMeta.color,
+        icon: kind === 'custom' ? customIcon : '',
         plan_mode: planMode,
         contribution_aud:
           planMode === 'deadline' ? Math.round(effectiveContribution * 100) / 100 : contribN,
@@ -157,8 +163,8 @@ export default function SavingsEditScreen() {
         />
       </Section>
 
-      <Section accent={SectionAccents.formKinds} title="Category" hint="Pick a vibe for this goal">
-        <View style={styles.kindGrid}>
+      <Section accent={SectionAccents.formKinds} title="Category" hint="Swipe for more · Custom picks any icon">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kindRow}>
           {SAVINGS_KINDS.map((k) => {
             const on = kind === k.id;
             return (
@@ -178,7 +184,35 @@ export default function SavingsEditScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
+        {kind === 'custom' ? (
+          <>
+            <Text style={styles.fieldLabel}>Custom icon</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.iconRow}>
+              {CATEGORY_ICON_OPTIONS.map((opt) => {
+                const on = customIcon === opt.id;
+                return (
+                  <Pressable
+                    key={opt.id}
+                    onPress={() => setCustomIcon(opt.id)}
+                    style={[
+                      styles.iconPick,
+                      on && { borderColor: Palette.cyan, backgroundColor: `${Palette.cyan}22` },
+                    ]}>
+                    <Ionicons
+                      name={opt.ion}
+                      size={20}
+                      color={on ? Palette.cyan : Palette.textMuted}
+                    />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </>
+        ) : null}
       </Section>
 
       <Section accent={SectionAccents.formMoney} title="Amounts" hint="Target and what you already have">
@@ -393,11 +427,9 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.panelElevated,
     fontSize: 16,
   },
-  kindGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  kindRow: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
   kindCard: {
-    width: '31%',
-    flexGrow: 1,
-    minWidth: 96,
+    width: 84,
     borderRadius: Radii.md,
     borderWidth: 1,
     borderColor: Palette.stroke,
@@ -414,6 +446,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   kindLabel: { color: Palette.textMuted, fontSize: 11, fontWeight: '600' },
+  iconRow: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
+  iconPick: {
+    width: 42,
+    height: 42,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    backgroundColor: Palette.panelElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   seg: { gap: 8 },
   segBtn: {
     borderRadius: Radii.md,

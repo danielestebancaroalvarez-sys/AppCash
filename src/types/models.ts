@@ -89,6 +89,8 @@ export interface SavingsGoal {
   updated_at: string;
   kind: SavingsGoalKind;
   color: string;
+  /** Icon id for custom kinds (see category-icons). */
+  icon: string;
   plan_mode: SavingsPlanMode;
   contribution_aud: number;
   contribution_frequency: ContributionFrequency;
@@ -107,6 +109,7 @@ export type SavingsGoalKind =
   | 'family'
   | 'wedding'
   | 'investment'
+  | 'custom'
   | 'other';
 
 export type SavingsPlanMode = 'contribution' | 'deadline';

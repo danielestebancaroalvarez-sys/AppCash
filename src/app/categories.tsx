@@ -3,6 +3,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,7 +18,6 @@ import {
   CATEGORY_COLOR_OPTIONS,
   CATEGORY_ICON_OPTIONS,
   categoryIonicon,
-  type CategoryIconId,
 } from '@/constants/category-icons';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -36,7 +36,7 @@ export default function CategoriesScreen() {
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState<CategoryType>('expense');
-  const [icon, setIcon] = useState<CategoryIconId>('tag');
+  const [icon, setIcon] = useState('tag');
   const [color, setColor] = useState(CATEGORY_COLOR_OPTIONS[0]);
   const [busy, setBusy] = useState(false);
 
@@ -53,7 +53,7 @@ export default function CategoriesScreen() {
     setEditing(cat);
     setName(cat.name);
     setType(cat.type);
-    setIcon((cat.icon as CategoryIconId) || 'tag');
+    setIcon(cat.icon || 'tag');
     setColor(cat.color || CATEGORY_COLOR_OPTIONS[0]);
     setFormOpen(true);
   };
@@ -178,16 +178,22 @@ export default function CategoriesScreen() {
           ))}
         </View>
         <Text style={styles.label}>Icon</Text>
-        <View style={styles.iconGrid}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.iconRow}>
           {CATEGORY_ICON_OPTIONS.map((opt) => (
             <Pressable
               key={opt.id}
               onPress={() => setIcon(opt.id)}
-              style={[styles.iconPick, icon === opt.id && { borderColor: color, backgroundColor: `${color}22` }]}>
+              style={[
+                styles.iconPick,
+                icon === opt.id && { borderColor: color, backgroundColor: `${color}22` },
+              ]}>
               <Ionicons name={opt.ion} size={22} color={icon === opt.id ? color : Palette.textMuted} />
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       </AppModal>
 
       {Dialog}
@@ -236,6 +242,7 @@ const styles = StyleSheet.create({
   },
   colorDotOn: { borderColor: Palette.white },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  iconRow: { flexDirection: 'row', gap: 8, marginTop: 8, paddingVertical: 2 },
   iconPick: {
     width: 44,
     height: 44,

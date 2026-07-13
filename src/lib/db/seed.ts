@@ -12,18 +12,38 @@ import {
 import type { Category, CategoryType } from '@/types/models';
 
 const DEFAULT_CATEGORIES: Array<{ name: string; type: CategoryType; icon: string; color: string }> = [
+  // Income
   { name: 'Salary', type: 'income', icon: 'briefcase', color: CategoryPalette[1] },
   { name: 'Side income', type: 'income', icon: 'sparkles', color: CategoryPalette[0] },
+  { name: 'Refunds', type: 'income', icon: 'cash', color: CategoryPalette[5] },
+  { name: 'Investments', type: 'income', icon: 'wallet', color: CategoryPalette[4] },
+  // Expense
   { name: 'Rent', type: 'expense', icon: 'home', color: CategoryPalette[4] },
   { name: 'Utilities', type: 'expense', icon: 'bolt', color: CategoryPalette[5] },
+  { name: 'Internet & phone', type: 'expense', icon: 'wifi', color: CategoryPalette[0] },
   { name: 'Subscriptions', type: 'expense', icon: 'repeat', color: CategoryPalette[3] },
   { name: 'Gym', type: 'expense', icon: 'dumbbell', color: CategoryPalette[6] },
   { name: 'Groceries', type: 'expense', icon: 'cart', color: CategoryPalette[1] },
   { name: 'Restaurants', type: 'expense', icon: 'utensils', color: CategoryPalette[7] },
+  { name: 'Coffee & snacks', type: 'expense', icon: 'cafe', color: CategoryPalette[2] },
   { name: 'Transport', type: 'expense', icon: 'car', color: CategoryPalette[2] },
+  { name: 'Fuel', type: 'expense', icon: 'flame', color: CategoryPalette[6] },
+  { name: 'Health', type: 'expense', icon: 'medical', color: CategoryPalette[3] },
+  { name: 'Insurance', type: 'expense', icon: 'umbrella', color: CategoryPalette[5] },
+  { name: 'Personal care', type: 'expense', icon: 'sparkle', color: CategoryPalette[7] },
+  { name: 'Clothes', type: 'expense', icon: 'shirt', color: CategoryPalette[4] },
+  { name: 'Tech & gadgets', type: 'expense', icon: 'laptop', color: CategoryPalette[0] },
+  { name: 'Entertainment', type: 'expense', icon: 'film', color: CategoryPalette[3] },
+  { name: 'Pets', type: 'expense', icon: 'paw', color: CategoryPalette[1] },
+  { name: 'Kids & family', type: 'expense', icon: 'people', color: CategoryPalette[7] },
+  { name: 'Home & DIY', type: 'expense', icon: 'construct', color: CategoryPalette[6] },
+  { name: 'Education', type: 'expense', icon: 'school', color: CategoryPalette[5] },
   { name: 'Extras', type: 'expense', icon: 'gift', color: CategoryPalette[3] },
+  // Savings
   { name: 'Emergency fund', type: 'savings', icon: 'shield', color: CategoryPalette[0] },
   { name: 'Holiday', type: 'savings', icon: 'plane', color: CategoryPalette[5] },
+  { name: 'House deposit', type: 'savings', icon: 'home', color: CategoryPalette[4] },
+  { name: 'Car fund', type: 'savings', icon: 'car', color: CategoryPalette[2] },
 ];
 
 /** Always safe to call — fills missing users/categories without wiping real data. */
@@ -36,16 +56,6 @@ export async function ensureHouseholdDefaults(
 
   const users = await listUsers();
   const primaryId = users.find((u) => u.role === 'owner')?.id ?? users[0]?.id;
-  if (primaryId && !users.some((u) => u.role === 'member')) {
-    await upsertUser({
-      id: createId(),
-      name: 'Partner',
-      email: '',
-      avatar_url: '',
-      role: 'member',
-      updated_at: nowIso(),
-    });
-  }
 
   const cats = await listCategories();
   const byName = new Map(cats.map((c) => [c.name.toLowerCase(), c]));

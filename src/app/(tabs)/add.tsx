@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -322,7 +323,10 @@ export default function AddScreen() {
                 </Text>
               </Pressable>
             ) : (
-              <View style={styles.chips}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipsScroll}>
                 {filteredCats.map((c) => {
                   const selected = effectiveCategory === c.id;
                   return (
@@ -349,7 +353,7 @@ export default function AddScreen() {
                     </Pressable>
                   );
                 })}
-              </View>
+              </ScrollView>
             )}
           </Section>
 
@@ -362,11 +366,14 @@ export default function AddScreen() {
               <View style={styles.emptyBox}>
                 <Ionicons name="person-outline" size={18} color={Palette.amber} />
                 <Text style={styles.emptyText}>
-                  No profiles yet. Pull to refresh or reopen the app.
+                  No profiles yet. Add people in Account.
                 </Text>
               </View>
             ) : (
-            <View style={styles.chips}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsScroll}>
               {users.map((u) => {
                 const selected = effectiveUser === u.id;
                 return (
@@ -391,7 +398,7 @@ export default function AddScreen() {
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
             )}
           </Section>
 
@@ -609,6 +616,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chipsScroll: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
   catChip: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -87,6 +87,7 @@ export const SHEET_HEADERS: Record<SheetName, string[]> = {
     'who',
     'kind',
     'color',
+    'icon',
     'plan',
     'contribution',
     'frequency',
@@ -159,6 +160,7 @@ export type SavingsRow = {
   updated_at: string;
   kind: string;
   color: string;
+  icon: string;
   plan: string;
   contribution: number;
   frequency: string;
@@ -492,6 +494,7 @@ export function parseAhorroRows(values: string[][]): SavingsRow[] {
     updated_at: o.updated_at || o.actualizado || '',
     kind: o.kind || o.categoria || o.category || 'other',
     color: o.color || '#3DE7FF',
+    icon: o.icon || '',
     plan: o.plan || o.plan_mode || 'contribution',
     contribution: asNum(o.contribution) || asNum(o.aporte) || asNum(o.contribution_aud),
     frequency: o.frequency || o.frecuencia || o.contribution_frequency || 'monthly',
