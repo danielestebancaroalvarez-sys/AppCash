@@ -21,11 +21,10 @@ export function ExpensesByPersonWidget({ stats }: { stats: PeriodStats }) {
           {stats.byUser.filter((u) => u.spent > 0).length} people · {formatAud(spentTotal)}
         </Text>
       }>
-      <Text style={styles.legend}>Dark bar = extra spend · Light = planned / fixed</Text>
+      <Text style={styles.legend}>Bar segments = category share (by colour)</Text>
       {stats.byUser.map((u) => {
         const pct = Math.round((u.spent / total) * 1000) / 10;
-        const plannedPct = u.spent > 0 ? (u.planned / u.spent) * 100 : 0;
-        const extraPct = u.spent > 0 ? (u.extra / u.spent) * 100 : 0;
+        const catTotal = u.categories.reduce((a, c) => a + c.value, 0) || u.spent || 1;
         return (
           <View key={u.id} style={styles.card}>
             <View style={styles.head}>
@@ -36,19 +35,46 @@ export function ExpensesByPersonWidget({ stats }: { stats: PeriodStats }) {
               </View>
               <Text style={styles.amt}>{formatAud(u.spent)}</Text>
             </View>
+
             <View style={styles.track}>
-              <View style={[styles.fillLight, { width: `${plannedPct}%` }]} />
-              <View style={[styles.fillDark, { width: `${extraPct}%` }]} />
+              {u.categories.length ? (
+                u.categories.map((c) => (
+                  <View
+                    key={c.label}
+                    style={[
+                      styles.seg,
+                      {
+                        flex: Math.max(c.value, 0.01),
+                        backgroundColor: c.color,
+                        opacity: 0.9,
+                      },
+                    ]}
+                  />
+                ))
+              ) : (
+                <View style={[styles.seg, { flex: 1, backgroundColor: Palette.violet, opacity: 0.35 }]} />
+              )}
             </View>
+
             {u.categories.length ? (
               <View style={styles.cats}>
-                {u.categories.map((c) => (
-                  <Text key={c.label} style={styles.catChip}>
-                    · {c.label} {formatAud(c.value)}
-                  </Text>
-                ))}
+                {u.categories.map((c) => {
+                  const share = Math.round((c.value / catTotal) * 100);
+                  return (
+                    <View key={c.label} style={styles.catChip}>
+                      <View style={[styles.catDot, { backgroundColor: c.color }]} />
+                      <Text style={styles.catText} numberOfLines={1}>
+                        {c.label}
+                      </Text>
+                      <Text style={[styles.catAmt, { color: c.color }]}>{formatAud(c.value)}</Text>
+                      <Text style={styles.catPct}>{share}%</Text>
+                    </View>
+                  );
+                })}
               </View>
-            ) : null}
+            ) : (
+              <Text style={styles.emptyCats}>No expenses this period</Text>
+            )}
           </View>
         );
       })}
@@ -72,14 +98,22 @@ const styles = StyleSheet.create({
   pct: { color: Palette.textDim, fontSize: 11, marginTop: 2 },
   amt: { color: Palette.text, fontWeight: '800' },
   track: {
-    height: 8,
-    borderRadius: 4,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: 'rgba(255,255,255,0.06)',
     flexDirection: 'row',
     overflow: 'hidden',
   },
-  fillLight: { height: '100%', backgroundColor: 'rgba(139,124,255,0.45)' },
-  fillDark: { height: '100%', backgroundColor: Palette.violet },
-  cats: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  catChip: { color: Palette.textMuted, fontSize: 11 },
+  seg: { height: '100%' },
+  cats: { gap: 6 },
+  catChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  catDot: { width: 8, height: 8, borderRadius: 4 },
+  catText: { flex: 1, color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
+  catAmt: { fontSize: 12, fontWeight: '800' },
+  catPct: { color: Palette.textDim, fontSize: 11, minWidth: 32, textAlign: 'right' },
+  emptyCats: { color: Palette.textDim, fontSize: 11 },
 });

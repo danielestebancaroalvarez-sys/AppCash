@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Rect } from 'react-native-svg';
 import { Fonts, Palette, Spacing } from '@/constants/theme';
-import { formatAud } from '@/lib/money';
+import { formatAud, formatAudShort } from '@/lib/money';
 
 type Seg = { label: string; value: number; color: string };
 
@@ -199,11 +199,24 @@ export function PlainDailyBars({
   return (
     <View style={styles.dailyBars}>
       {values.map((v) => {
-        const h = Math.max(6, (v.value / max) * 100);
+        const h = Math.max(v.value > 0 ? 10 : 4, (v.value / max) * 88);
         return (
           <View key={v.label} style={styles.dailyCol}>
-            <Svg width={28} height={110}>
-              <Rect x={4} y={110 - h} width={20} height={h} rx={8} fill={color} opacity={0.85} />
+            <Text
+              style={[styles.dailyAmt, v.value <= 0 && styles.dailyAmtZero]}
+              numberOfLines={1}>
+              {formatAudShort(v.value)}
+            </Text>
+            <Svg width={36} height={100}>
+              <Rect
+                x={8}
+                y={100 - h}
+                width={20}
+                height={h}
+                rx={8}
+                fill={color}
+                opacity={v.value > 0 ? 0.9 : 0.25}
+              />
             </Svg>
             <Text style={styles.miniLabel}>{v.label}</Text>
           </View>
@@ -262,6 +275,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   miniLabel: { color: Palette.textDim, fontSize: 9 },
-  dailyBars: { flexDirection: 'row', justifyContent: 'space-between' },
-  dailyCol: { alignItems: 'center', width: 36 },
+  dailyBars: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  dailyCol: { alignItems: 'center', width: 42 },
+  dailyAmt: {
+    color: Palette.text,
+    fontSize: 9,
+    fontWeight: '800',
+    marginBottom: 4,
+    minHeight: 12,
+  },
+  dailyAmtZero: { color: Palette.textDim, fontWeight: '600' },
 });

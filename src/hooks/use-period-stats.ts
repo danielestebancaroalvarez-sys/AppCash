@@ -169,10 +169,14 @@ export function usePeriodStats(): PeriodStats {
       const cats = [...catMap.entries()]
         .map(([id, value], i) => {
           const cat = categories.find((c) => c.id === id);
-          return { label: cat?.name ?? 'Other', value, color: CategoryPalette[i % CategoryPalette.length] };
+          return {
+            label: cat?.name ?? 'Other',
+            value,
+            color: cat?.color || CategoryPalette[i % CategoryPalette.length],
+          };
         })
         .sort((a, b) => b.value - a.value)
-        .slice(0, 4);
+        .slice(0, 6);
       return {
         id: u.id,
         name: u.name,
