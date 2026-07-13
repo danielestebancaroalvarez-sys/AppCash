@@ -1,183 +1,130 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import {
-  getDeepSeekApiKey,
   getGeminiApiKey,
   getNvidiaApiKey,
   getOpenRouterApiKey,
-  getOcrSpaceApiKey,
-  getReceiptProvider,
-  setDeepSeekApiKey,
   setGeminiApiKey,
   setNvidiaApiKey,
   setOpenRouterApiKey,
-  setOcrSpaceApiKey,
-  setReceiptProvider,
-  type ReceiptAiProvider,
 } from '@/lib/ai/receipts';
 
-const PROVIDERS: Array<{
-  id: ReceiptAiProvider;
-  label: string;
-  hint: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-}> = [
+const CASCADE = [
   {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    hint: 'Free vision models — openrouter.ai',
-    icon: 'planet-outline',
-    color: Palette.cyan,
+    id: 'gemini' as const,
+    step: '1',
+    label: 'Gemini',
+    hint: 'Tried first — aistudio.google.com/apikey',
+    icon: 'sparkles-outline' as const,
+    color: Palette.amber,
   },
   {
-    id: 'nvidia',
+    id: 'nvidia' as const,
+    step: '2',
     label: 'NVIDIA',
-    hint: 'Free NIM APIs — build.nvidia.com',
-    icon: 'hardware-chip-outline',
+    hint: 'If Gemini fails — build.nvidia.com',
+    icon: 'hardware-chip-outline' as const,
     color: Palette.teal,
   },
   {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    hint: 'OCR.space + DeepSeek text',
-    icon: 'document-text-outline',
-    color: Palette.violet,
-  },
-  {
-    id: 'gemini',
-    label: 'Gemini',
-    hint: 'Google AI Studio key',
-    icon: 'sparkles-outline',
-    color: Palette.amber,
+    id: 'openrouter' as const,
+    step: '3',
+    label: 'OpenRouter',
+    hint: 'Last resort — openrouter.ai',
+    icon: 'planet-outline' as const,
+    color: Palette.cyan,
   },
 ];
 
 export default function AccountAiScreen() {
   const { alert, Dialog } = useAppDialog();
-  const [provider, setProvider] = useState<ReceiptAiProvider>('openrouter');
   const [openrouter, setOpenrouter] = useState('');
-  const [deepseek, setDeepseek] = useState('');
   const [gemini, setGemini] = useState('');
   const [nvidia, setNvidia] = useState('');
-  const [ocrSpace, setOcrSpace] = useState('');
 
   useEffect(() => {
     void (async () => {
-      setProvider(await getReceiptProvider());
       setOpenrouter(await getOpenRouterApiKey());
-      setDeepseek(await getDeepSeekApiKey());
       setGemini(await getGeminiApiKey());
       setNvidia(await getNvidiaApiKey());
-      const ocr = await getOcrSpaceApiKey();
-      setOcrSpace(ocr === 'helloworld' ? '' : ocr);
     })();
   }, []);
 
   const saveAi = async () => {
-    await setReceiptProvider(provider);
     await setOpenRouterApiKey(openrouter);
-    await setDeepSeekApiKey(deepseek);
     await setGeminiApiKey(gemini);
     await setNvidiaApiKey(nvidia);
-    if (ocrSpace.trim()) await setOcrSpaceApiKey(ocrSpace);
-    alert('Saved', `Receipt AI provider: ${provider}`);
+    alert('Saved', 'Receipt scan will try Gemini → NVIDIA → OpenRouter.');
   };
 
   return (
     <Screen tabAware={false}>
       <Text style={styles.lead}>
-        Keys stay on this phone. OpenRouter and NVIDIA can read receipt photos directly; DeepSeek
-        needs OCR first.
+        Keys stay on this phone. Scan always tries Gemini first, then NVIDIA, then OpenRouter —
+        and within each, the next model if one fails.
       </Text>
 
-      <Text style={styles.section}>Provider</Text>
+      <Text style={styles.section}>Fallback order</Text>
       <View style={styles.providerGrid}>
-        {PROVIDERS.map((p) => {
-          const on = provider === p.id;
-          return (
-            <Pressable
-              key={p.id}
-              onPress={() => setProvider(p.id)}
-              style={[styles.providerCard, on && { borderColor: p.color }]}>
-              <View style={[styles.providerIcon, { backgroundColor: `${p.color}22` }]}>
-                <Ionicons name={p.icon} size={20} color={p.color} />
-              </View>
-              <Text style={[styles.providerLabel, on && { color: Palette.text }]}>{p.label}</Text>
-              <Text style={styles.providerHint} numberOfLines={2}>
-                {p.hint}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {CASCADE.map((p) => (
+          <View key={p.id} style={[styles.providerCard, { borderColor: `${p.color}66` }]}>
+            <View style={[styles.stepBadge, { backgroundColor: `${p.color}22` }]}>
+              <Text style={[styles.stepText, { color: p.color }]}>{p.step}</Text>
+            </View>
+            <View style={[styles.providerIcon, { backgroundColor: `${p.color}22` }]}>
+              <Ionicons name={p.icon} size={20} color={p.color} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.providerLabel}>{p.label}</Text>
+              <Text style={styles.providerHint}>{p.hint}</Text>
+            </View>
+          </View>
+        ))}
       </View>
 
       <GlassPanel style={{ gap: Spacing.sm, marginTop: Spacing.md }}>
         <Text style={styles.section}>API keys</Text>
 
-        {provider === 'openrouter' ? (
-          <TextInput
-            value={openrouter}
-            onChangeText={setOpenrouter}
-            placeholder="OpenRouter API key (sk-or-…)"
-            placeholderTextColor={Palette.textDim}
-            secureTextEntry
-            autoCapitalize="none"
-            style={styles.input}
-          />
-        ) : null}
+        <Text style={styles.keyLabel}>Gemini</Text>
+        <TextInput
+          value={gemini}
+          onChangeText={setGemini}
+          placeholder="AIza… (Google AI Studio)"
+          placeholderTextColor={Palette.textDim}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+        />
 
-        {provider === 'deepseek' ? (
-          <>
-            <TextInput
-              value={deepseek}
-              onChangeText={setDeepseek}
-              placeholder="DeepSeek API key (sk-…)"
-              placeholderTextColor={Palette.textDim}
-              secureTextEntry
-              autoCapitalize="none"
-              style={styles.input}
-            />
-            <TextInput
-              value={ocrSpace}
-              onChangeText={setOcrSpace}
-              placeholder="OCR.space key (optional)"
-              placeholderTextColor={Palette.textDim}
-              secureTextEntry
-              autoCapitalize="none"
-              style={styles.input}
-            />
-          </>
-        ) : null}
+        <Text style={styles.keyLabel}>NVIDIA</Text>
+        <TextInput
+          value={nvidia}
+          onChangeText={setNvidia}
+          placeholder="nvapi-…"
+          placeholderTextColor={Palette.textDim}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+        />
 
-        {provider === 'gemini' ? (
-          <TextInput
-            value={gemini}
-            onChangeText={setGemini}
-            placeholder="Gemini API key"
-            placeholderTextColor={Palette.textDim}
-            secureTextEntry
-            autoCapitalize="none"
-            style={styles.input}
-          />
-        ) : null}
-
-        {provider === 'nvidia' ? (
-          <TextInput
-            value={nvidia}
-            onChangeText={setNvidia}
-            placeholder="NVIDIA API key (nvapi-…)"
-            placeholderTextColor={Palette.textDim}
-            secureTextEntry
-            autoCapitalize="none"
-            style={styles.input}
-          />
-        ) : null}
+        <Text style={styles.keyLabel}>OpenRouter</Text>
+        <TextInput
+          value={openrouter}
+          onChangeText={setOpenrouter}
+          placeholder="sk-or-…"
+          placeholderTextColor={Palette.textDim}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+        />
 
         <PrimaryButton label="Save AI settings" onPress={saveAi} />
       </GlassPanel>
@@ -200,13 +147,20 @@ const styles = StyleSheet.create({
   providerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     backgroundColor: Palette.panel,
     borderRadius: Radii.lg,
     borderWidth: 1,
-    borderColor: Palette.stroke,
     padding: Spacing.sm,
   },
+  stepBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepText: { fontWeight: '800', fontSize: 13 },
   providerIcon: {
     width: 40,
     height: 40,
@@ -215,13 +169,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   providerLabel: {
-    color: Palette.textMuted,
+    color: Palette.text,
     fontFamily: Fonts.display,
     fontWeight: '800',
     fontSize: 14,
-    width: 88,
   },
-  providerHint: { flex: 1, color: Palette.textDim, fontSize: 12 },
+  providerHint: { color: Palette.textDim, fontSize: 12, marginTop: 2 },
+  keyLabel: { color: Palette.textMuted, fontSize: 12, fontWeight: '700', marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: Palette.stroke,

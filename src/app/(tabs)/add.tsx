@@ -25,7 +25,7 @@ import { nowIso, todayIsoDate } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
 import { upsertTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
-import { parseReceiptImage } from '@/lib/ai/receipts';
+import { parseReceiptImage, type ReceiptScanProgress } from '@/lib/ai/receipts';
 import type { TransactionType } from '@/types/models';
 
 type AddMode = 'expense' | 'income' | 'receipt';
@@ -77,6 +77,7 @@ export default function AddScreen() {
   const [userId, setUserId] = useState('');
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [scanProgress, setScanProgress] = useState<ReceiptScanProgress | null>(null);
 
   const modeMeta = MODES.find((m) => m.id === mode)!;
 
@@ -161,17 +162,22 @@ export default function AddScreen() {
         return;
       }
       const result = fromCamera
-        ? await ImagePicker.launchCameraAsync({ quality: 0.7, base64: false })
-        : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, base64: false });
+        ? await ImagePicker.launchCameraAsync({ quality: 0.45, allowsEditing: false })
+        : await ImagePicker.launchImageLibraryAsync({ quality: 0.45, allowsEditing: false });
       if (result.canceled || !result.assets[0]) return;
 
       const uri = result.assets[0].uri;
       setAnalyzing(true);
+      setScanProgress({
+        stage: 'prepare',
+        message: 'Preparing photo for AI scan…',
+      });
       let parsed;
       try {
-        parsed = await parseReceiptImage(uri);
+        parsed = await parseReceiptImage(uri, { onProgress: setScanProgress });
       } catch (e) {
         setAnalyzing(false);
+        setScanProgress(null);
         confirm(
           'Receipt scan',
           e instanceof Error ? e.message : 'Could not parse receipt',
@@ -202,6 +208,7 @@ export default function AddScreen() {
       });
     } finally {
       setAnalyzing(false);
+      setScanProgress(null);
       setBusy(false);
     }
   };
@@ -470,8 +477,48 @@ export default function AddScreen() {
         <View style={styles.analyzingOverlay}>
           <View style={styles.analyzingCard}>
             <ActivityIndicator size="large" color={Palette.cyan} />
-            <Text style={styles.analyzingTitle}>Reading receipt…</Text>
-            <Text style={styles.analyzingHint}>AI is extracting store, date and line items</Text>
+            <Text style={styles.analyzingTitle}>
+              {scanProgress?.stage === 'fallback'
+                ? 'Trying next option…'
+                : scanProgress?.stage === 'done'
+                  ? 'Done'
+                  : 'Reading receipt…'}
+            </Text>
+            {scanProgress?.provider ? (
+              <View style={styles.analyzingProviderRow}>
+                <View
+                  style={[
+                    styles.analyzingProviderDot,
+                    {
+                      backgroundColor:
+                        scanProgress.provider === 'gemini'
+                          ? Palette.amber
+                          : scanProgress.provider === 'nvidia'
+                            ? Palette.teal
+                            : Palette.cyan,
+                    },
+                  ]}
+                />
+                <Text style={styles.analyzingProvider}>
+                  {scanProgress.provider === 'gemini'
+                    ? 'Gemini'
+                    : scanProgress.provider === 'nvidia'
+                      ? 'NVIDIA'
+                      : 'OpenRouter'}
+                  {scanProgress.model ? ` · ${scanProgress.model.split('/').pop()}` : ''}
+                </Text>
+              </View>
+            ) : null}
+            <Text style={styles.analyzingHint}>
+              {scanProgress?.message || 'AI is extracting store, date and line items'}
+            </Text>
+            <Text style={styles.analyzingMeta}>
+              {scanProgress?.stage === 'prepare'
+                ? 'Optimizing photo before upload'
+                : scanProgress?.attempt && scanProgress.totalAttempts
+                  ? `Model ${scanProgress.attempt} of ${scanProgress.totalAttempts}`
+                  : 'Cascade: Gemini → NVIDIA → OpenRouter'}
+            </Text>
           </View>
         </View>
       </Modal>
@@ -720,11 +767,33 @@ const styles = StyleSheet.create({
     fontSize: 17,
     marginTop: Spacing.sm,
   },
+  analyzingProviderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  analyzingProviderDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  analyzingProvider: {
+    color: Palette.text,
+    fontWeight: '700',
+    fontSize: 13,
+  },
   analyzingHint: {
     color: Palette.textMuted,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  analyzingMeta: {
+    color: Palette.textDim,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 4,
   },
   receiptHero: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
   receiptBlob: {
