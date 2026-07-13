@@ -1,10 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { UserName } from '@/components/ui/UserAvatar';
-import { Fonts, Palette, Spacing } from '@/constants/theme';
+import { categoryIonicon } from '@/constants/category-icons';
+import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { formatAud } from '@/lib/money';
 import { deleteFixedItem } from '@/lib/db';
@@ -31,8 +33,12 @@ export default function FixedListScreen() {
       {fixedItems.map((item) => {
         const user = users.find((u) => u.id === item.user_id);
         const cat = categories.find((c) => c.id === item.category_id);
+        const color = cat?.color || (item.direction === 'in' ? Palette.teal : Palette.coral);
         return (
           <GlassPanel key={item.id} style={styles.row}>
+            <View style={[styles.catIcon, { backgroundColor: `${color}28` }]}>
+              <Ionicons name={categoryIonicon(cat?.icon ?? 'cube')} size={18} color={color} />
+            </View>
             <Pressable
               style={{ flex: 1 }}
               onPress={() =>
@@ -45,8 +51,8 @@ export default function FixedListScreen() {
               </Text>
               <View style={styles.metaRow}>
                 <UserName user={user} size={16} textStyle={styles.meta} />
-                <Text style={styles.meta}>
-                  · {cat?.name} · next {item.next_due}
+                <Text style={[styles.meta, { color }]}>
+                  · {cat?.name ?? '—'} · next {item.next_due}
                 </Text>
               </View>
             </Pressable>
@@ -76,7 +82,14 @@ export default function FixedListScreen() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', marginBottom: Spacing.sm, gap: 10 },
+  row: { flexDirection: 'row', marginBottom: Spacing.sm, gap: 10, alignItems: 'center' },
+  catIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   name: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '700', fontSize: 16 },
   meta: { color: Palette.textDim, fontSize: 12 },
   metaRow: {

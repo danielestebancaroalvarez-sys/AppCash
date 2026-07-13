@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,18 +11,20 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format, parseISO } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { PrimaryButton } from '@/components/ui/Primitives';
+import { CategoryChipRow } from '@/components/ui/CategoryChip';
 import { useAppDialog } from '@/components/ui/useAppDialog';
-import { categoryIonicon } from '@/constants/category-icons';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { createId } from '@/lib/id';
-import { nowIso, todayIsoDate } from '@/lib/dates';
+import { formatDisplayDate, nowIso, todayIsoDate } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
 import { upsertTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
@@ -78,6 +81,8 @@ export default function AddScreen() {
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [scanProgress, setScanProgress] = useState<ReceiptScanProgress | null>(null);
+  const [txDate, setTxDate] = useState(todayIsoDate());
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const modeMeta = MODES.find((m) => m.id === mode)!;
 
@@ -105,6 +110,19 @@ export default function AddScreen() {
     if (!categoryId && filteredCats[0]?.id) setCategoryId(filteredCats[0].id);
   }, [filteredCats, categoryId]);
 
+  useEffect(() => {
+    // Reset to today when switching expense/income
+    if (mode !== 'receipt') setTxDate(todayIsoDate());
+  }, [mode]);
+
+  const onDateChange = (_event: unknown, date?: Date) => {
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (!date) return;
+    const iso = format(date, 'yyyy-MM-dd');
+    const today = todayIsoDate();
+    setTxDate(iso > today ? today : iso);
+  };
+
   const saveQuick = async () => {
     const value = parseAmount(amount);
     if (!value) {
@@ -128,6 +146,9 @@ export default function AddScreen() {
       return;
     }
 
+    const today = todayIsoDate();
+    const dateIso = txDate > today ? today : txDate || today;
+
     const type: TransactionType = mode === 'income' ? 'income_sporadic' : 'expense_sporadic';
     const tx = {
       id: createId(),
@@ -135,7 +156,7 @@ export default function AddScreen() {
       type,
       category_id: effectiveCategory,
       amount_aud: value,
-      date: todayIsoDate(),
+      date: dateIso,
       note,
       merchant,
       receipt_id: '',
@@ -148,6 +169,7 @@ export default function AddScreen() {
     setAmount('');
     setNote('');
     setMerchant('');
+    setTxDate(todayIsoDate());
     alert('Saved', `${mode === 'income' ? 'Income' : 'Expense'} of $${value.toFixed(2)} AUD added.`);
   };
 
@@ -330,37 +352,11 @@ export default function AddScreen() {
                 </Text>
               </Pressable>
             ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipsScroll}>
-                {filteredCats.map((c) => {
-                  const selected = effectiveCategory === c.id;
-                  return (
-                    <Pressable
-                      key={c.id}
-                      onPress={() => setCategoryId(c.id)}
-                      style={[
-                        styles.catChip,
-                        selected && {
-                          backgroundColor: `${c.color}28`,
-                          borderColor: c.color,
-                        },
-                      ]}>
-                      <View style={[styles.catIcon, { backgroundColor: `${c.color}33` }]}>
-                        <Ionicons name={categoryIonicon(c.icon)} size={16} color={c.color} />
-                      </View>
-                      <Text
-                        style={[
-                          styles.catLabel,
-                          selected && { color: Palette.text, fontWeight: '700' },
-                        ]}>
-                        {c.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+              <CategoryChipRow
+                categories={filteredCats}
+                selectedId={effectiveCategory}
+                onSelect={setCategoryId}
+              />
             )}
           </Section>
 
@@ -407,6 +403,36 @@ export default function AddScreen() {
               })}
             </ScrollView>
             )}
+          </Section>
+
+          <Section
+            accent={Palette.teal}
+            icon="calendar-outline"
+            title="Date"
+            hint="Today or any past day — future dates are blocked">
+            <Pressable
+              onPress={() => setShowDatePicker(true)}
+              style={({ pressed }) => [styles.dateBtn, pressed && { opacity: 0.85 }]}>
+              <Text style={styles.dateValue}>{formatDisplayDate(txDate)}</Text>
+              <Text style={styles.dateHint}>Tap to change · {txDate}</Text>
+            </Pressable>
+            {showDatePicker ? (
+              <DateTimePicker
+                value={parseISO(`${txDate}T12:00:00`)}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                maximumDate={new Date()}
+                onChange={onDateChange}
+                themeVariant="dark"
+              />
+            ) : null}
+            {Platform.OS === 'ios' && showDatePicker ? (
+              <PrimaryButton
+                label="Done with date"
+                onPress={() => setShowDatePicker(false)}
+                variant="ghost"
+              />
+            ) : null}
           </Section>
 
           <Pressable
@@ -645,6 +671,22 @@ const styles = StyleSheet.create({
   sectionTitle: { fontFamily: Fonts.display, fontWeight: '800', fontSize: 14 },
   sectionHint: { color: Palette.textDim, fontSize: 11, marginTop: 1 },
   fieldLabel: { color: Palette.textMuted, fontSize: 12 },
+  dateBtn: {
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    borderRadius: Radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: Palette.panelElevated,
+    gap: 2,
+  },
+  dateValue: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  dateHint: { color: Palette.cyan, fontSize: 12 },
   link: { fontSize: 12, fontWeight: '700' },
   input: {
     borderWidth: 1,

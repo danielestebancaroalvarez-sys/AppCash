@@ -1,5 +1,7 @@
 import { StyleSheet, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
+import { GlassPanel } from '@/components/ui/Primitives';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { AppBalanceCard } from '@/components/dashboard/AppBalanceCard';
 import { PeriodBudgetWidget } from '@/components/dashboard/PeriodBudgetWidget';
@@ -15,13 +17,17 @@ import { UpcomingBillsWidget } from '@/components/dashboard/UpcomingBillsWidget'
 import { CashflowWidget } from '@/components/dashboard/CashflowWidget';
 import { TopMerchantsWidget } from '@/components/dashboard/TopMerchantsWidget';
 import { GoalsPaceWidget } from '@/components/dashboard/GoalsPaceWidget';
-import { Palette, Spacing } from '@/constants/theme';
+import { Fonts, Palette, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { usePeriodStats } from '@/hooks/use-period-stats';
 import { useWidgetPrefs } from '@/hooks/use-widget-prefs';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { recomputeProductStats } from '@/lib/insights/market';
-import type { DashboardWidgetId } from '@/lib/dashboard/widgets';
+import {
+  periodHasAnyData,
+  widgetHasData,
+  type DashboardWidgetId,
+} from '@/lib/dashboard/widgets';
 
 export default function DashboardScreen() {
   const syncMessage = useFinanceStore((s) => s.syncMessage);
@@ -31,12 +37,23 @@ export default function DashboardScreen() {
     await recomputeProductStats();
   });
 
-  const show = (id: DashboardWidgetId) => isEnabled(id);
+  const show = (id: DashboardWidgetId) => isEnabled(id) && widgetHasData(id, stats);
+  const emptyPeriod = !periodHasAnyData(stats);
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <PeriodSelector />
       <AppBalanceCard stats={stats} />
+
+      {emptyPeriod ? (
+        <GlassPanel style={styles.emptyPanel}>
+          <Ionicons name="calendar-outline" size={28} color={Palette.cyan} />
+          <Text style={styles.emptyTitle}>No data in this period</Text>
+          <Text style={styles.emptyBody}>
+            Add an expense, income or scan a receipt for {stats.label}, or switch the week above.
+          </Text>
+        </GlassPanel>
+      ) : null}
 
       {show('period_budget') ? <PeriodBudgetWidget stats={stats} /> : null}
       {show('period_expenses') ? <PeriodExpensesWidget stats={stats} /> : null}
@@ -58,6 +75,24 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  emptyPanel: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+    paddingVertical: Spacing.lg,
+  },
+  emptyTitle: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  emptyBody: {
+    color: Palette.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   sync: {
     color: Palette.textDim,
     fontSize: 11,

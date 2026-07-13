@@ -435,6 +435,11 @@ export async function deleteReceipt(id: string): Promise<void> {
   await db.runAsync('DELETE FROM receipts WHERE id = ?', [id]);
 }
 
+export async function deleteReceiptItem(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM receipt_items WHERE id = ?', [id]);
+}
+
 export async function upsertSavingsGoal(g: SavingsGoal): Promise<void> {
   const db = await getDb();
   await db.runAsync(

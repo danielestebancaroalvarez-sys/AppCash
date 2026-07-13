@@ -1,7 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
 import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
 import { UserAvatar } from '@/components/ui/UserAvatar';
+import { categoryIonicon } from '@/constants/category-icons';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { formatAud } from '@/lib/money';
 import type { PeriodStats } from '@/hooks/use-period-stats';
@@ -62,7 +64,9 @@ export function ExpensesByPersonWidget({ stats }: { stats: PeriodStats }) {
                   const share = Math.round((c.value / catTotal) * 100);
                   return (
                     <View key={c.label} style={styles.catChip}>
-                      <View style={[styles.catDot, { backgroundColor: c.color }]} />
+                      <View style={[styles.catIcon, { backgroundColor: `${c.color}33` }]}>
+                        <Ionicons name={categoryIonicon(c.icon)} size={12} color={c.color} />
+                      </View>
                       <Text style={styles.catText} numberOfLines={1}>
                         {c.label}
                       </Text>
@@ -111,7 +115,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  catDot: { width: 8, height: 8, borderRadius: 4 },
+  catIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   catText: { flex: 1, color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
   catAmt: { fontSize: 12, fontWeight: '800' },
   catPct: { color: Palette.textDim, fontSize: 11, minWidth: 32, textAlign: 'right' },

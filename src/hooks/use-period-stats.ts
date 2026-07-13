@@ -18,7 +18,7 @@ export type PersonSpend = {
   spent: number;
   planned: number;
   extra: number;
-  categories: Array<{ label: string; value: number; color: string }>;
+  categories: Array<{ label: string; value: number; color: string; icon: string }>;
 };
 
 export type TrendWeek = {
@@ -133,16 +133,11 @@ export function usePeriodStats(): PeriodStats {
           id,
           label: cat?.name ?? 'Other',
           value,
-          color: CategoryPalette[i % CategoryPalette.length],
+          color: cat?.color || CategoryPalette[i % CategoryPalette.length],
         };
       })
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
-
-    // Re-assign colors after sort so rank 1 gets first palette color
-    segments.forEach((s, i) => {
-      s.color = CategoryPalette[i % CategoryPalette.length];
-    });
 
     const days = eachDayOfInterval({ start, end });
     const dailyBars = days.map((d) => {
@@ -173,6 +168,7 @@ export function usePeriodStats(): PeriodStats {
             label: cat?.name ?? 'Other',
             value,
             color: cat?.color || CategoryPalette[i % CategoryPalette.length],
+            icon: cat?.icon || 'cube',
           };
         })
         .sort((a, b) => b.value - a.value)

@@ -293,6 +293,21 @@ export default function SearchScreen() {
 
         <Text style={styles.fieldLabel}>CATEGORY</Text>
         <Pressable onPress={() => setPicker('category')} style={styles.dropdown}>
+          {categoryId !== 'all' ? (
+            <View
+              style={[
+                styles.dropdownIcon,
+                {
+                  backgroundColor: `${categories.find((c) => c.id === categoryId)?.color ?? Palette.cyan}28`,
+                },
+              ]}>
+              <Ionicons
+                name={categoryIonicon(categories.find((c) => c.id === categoryId)?.icon ?? 'cube')}
+                size={14}
+                color={categories.find((c) => c.id === categoryId)?.color ?? Palette.cyan}
+              />
+            </View>
+          ) : null}
           <Text style={styles.dropdownText}>{categoryLabel}</Text>
           <Ionicons name="chevron-down" size={16} color={Palette.textDim} />
         </Pressable>
@@ -500,8 +515,13 @@ export default function SearchScreen() {
         title="Category"
         onClose={() => setPicker(null)}
         options={[
-          { id: 'all', label: 'All categories' },
-          ...categories.map((c) => ({ id: c.id, label: c.name, color: c.color })),
+          { id: 'all', label: 'All categories', color: Palette.cyan, icon: 'pricetag' },
+          ...categories.map((c) => ({
+            id: c.id,
+            label: c.name,
+            color: c.color,
+            icon: c.icon,
+          })),
         ]}
         selected={categoryId}
         onSelect={(id) => {
@@ -564,7 +584,7 @@ function SelectModal({
 }: {
   visible: boolean;
   title: string;
-  options: Array<{ id: string; label: string; color?: string }>;
+  options: Array<{ id: string; label: string; color?: string; icon?: string }>;
   selected: string;
   onSelect: (id: string) => void;
   onClose: () => void;
@@ -578,14 +598,21 @@ function SelectModal({
           <ScrollView style={{ maxHeight: 360 }}>
             {options.map((opt) => {
               const on = selected === opt.id;
+              const color = opt.color || Palette.cyan;
               return (
                 <Pressable
                   key={opt.id}
                   onPress={() => onSelect(opt.id)}
                   style={[styles.modalRow, on && styles.modalRowOn]}>
                   {renderOption?.(opt)}
-                  {opt.color ? (
-                    <View style={[styles.colorDot, { backgroundColor: opt.color }]} />
+                  {opt.icon || opt.color ? (
+                    <View style={[styles.modalIcon, { backgroundColor: `${color}28` }]}>
+                      <Ionicons
+                        name={categoryIonicon(opt.icon || 'cube')}
+                        size={16}
+                        color={color}
+                      />
+                    </View>
                   ) : null}
                   <Text style={[styles.modalRowText, on && styles.modalRowTextOn]}>
                     {opt.label}
@@ -664,13 +691,20 @@ const styles = StyleSheet.create({
   dropdown: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 10,
     backgroundColor: Palette.panelElevated,
     borderRadius: Radii.md,
     borderWidth: 1,
     borderColor: Palette.stroke,
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  dropdownIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dropdownText: { color: Palette.text, fontSize: 14, flex: 1 },
   periodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -787,7 +821,13 @@ const styles = StyleSheet.create({
     borderBottomColor: Palette.stroke,
   },
   modalRowOn: { opacity: 1 },
+  modalIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modalRowText: { flex: 1, color: Palette.textMuted, fontSize: 15 },
   modalRowTextOn: { color: Palette.text, fontWeight: '700' },
-  colorDot: { width: 10, height: 10, borderRadius: 5 },
 });

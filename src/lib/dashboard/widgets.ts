@@ -1,3 +1,4 @@
+import type { PeriodStats } from '@/hooks/use-period-stats';
 import { getSetting, setSetting } from '@/lib/db';
 
 export const WIDGET_PREF_KEY = 'dashboard_widgets_v1';
@@ -144,4 +145,50 @@ export async function setWidgetEnabled(id: DashboardWidgetId, enabled: boolean):
   prefs[id] = enabled;
   await saveWidgetPrefs(prefs);
   return prefs;
+}
+
+/** Hide widgets that have nothing useful for the selected period. */
+export function widgetHasData(id: DashboardWidgetId, stats: PeriodStats): boolean {
+  switch (id) {
+    case 'period_budget':
+    case 'cashflow':
+      return stats.incomeTotal > 0 || stats.expenseTotal > 0 || stats.savingsContrib > 0;
+    case 'period_expenses':
+      return stats.segments.some((s) => s.value > 0);
+    case 'trend':
+      return stats.trend.some((w) => w.income > 0 || w.expenses > 0);
+    case 'expenses_by_person':
+      return stats.byUser.some((u) => u.spent > 0);
+    case 'savings_goals':
+    case 'goals_pace':
+      return stats.goals.length > 0;
+    case 'market':
+      return stats.marketThisWeek > 0 || stats.marketTopCategories.length > 0;
+    case 'daily_spend':
+      return stats.dailyBars.some((d) => d.value > 0);
+    case 'upcoming_buys':
+      return stats.upcomingBuys.length > 0;
+    case 'upcoming_bills':
+      return stats.upcomingBills.length > 0;
+    case 'top_merchants':
+      return stats.topMerchants.length > 0;
+    case 'converter':
+      return true;
+    default:
+      return true;
+  }
+}
+
+/** True when the selected period has income/expense/receipt activity. */
+export function periodHasAnyData(stats: PeriodStats): boolean {
+  return (
+    stats.incomeTotal > 0 ||
+    stats.expenseTotal > 0 ||
+    stats.savingsContrib > 0 ||
+    stats.segments.some((s) => s.value > 0) ||
+    stats.byUser.some((u) => u.spent > 0) ||
+    stats.dailyBars.some((d) => d.value > 0) ||
+    stats.marketThisWeek > 0 ||
+    stats.topMerchants.length > 0
+  );
 }

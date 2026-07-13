@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
@@ -8,10 +8,17 @@ import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
-import { formatAud } from '@/lib/money';
-import { formatDisplayDate } from '@/lib/dates';
-import { deleteReceipt } from '@/lib/db';
+import { formatAud, parseAmount } from '@/lib/money';
+import { formatDisplayDate, nowIso } from '@/lib/dates';
+import {
+  deleteReceipt,
+  deleteReceiptItem,
+  upsertReceiptItem,
+} from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
+import { isReceiptNoiseLine } from '@/lib/purchases/filter';
+import { recomputeProductStats } from '@/lib/insights/market';
+import type { ReceiptItem } from '@/types/models';
 
 function hasLocalPhoto(uri: string): boolean {
   return Boolean(uri && (uri.startsWith('file:') || uri.startsWith('content:') || uri.startsWith('http')));
@@ -24,15 +31,45 @@ export default function ReceiptDetailScreen() {
   const receiptItems = useFinanceStore((s) => s.receiptItems);
   const users = useFinanceStore((s) => s.users);
   const refresh = useFinanceStore((s) => s.refresh);
-  const { confirm, Dialog } = useAppDialog();
+  const { alert, confirm, Dialog } = useAppDialog();
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState('');
+  const [draftQty, setDraftQty] = useState('');
+  const [draftPrice, setDraftPrice] = useState('');
+  const [draftTotal, setDraftTotal] = useState('');
+  const [draftCat, setDraftCat] = useState('');
+  const cleanedNoiseFor = useRef<string | null>(null);
 
   const receipt = useMemo(() => receipts.find((r) => r.id === id), [receipts, id]);
-  const items = useMemo(
+  const rawItems = useMemo(
     () => receiptItems.filter((i) => i.receipt_id === id),
     [receiptItems, id]
   );
+  const items = useMemo(
+    () => rawItems.filter((i) => !isReceiptNoiseLine(i.name)),
+    [rawItems]
+  );
   const user = users.find((u) => u.id === receipt?.user_id);
+
+  // One-shot purge of leftover TOTAL / GST lines from older scans
+  useEffect(() => {
+    if (!id || cleanedNoiseFor.current === id) return;
+    const noise = rawItems.filter((i) => isReceiptNoiseLine(i.name));
+    if (!noise.length) {
+      cleanedNoiseFor.current = id;
+      return;
+    }
+    cleanedNoiseFor.current = id;
+    void (async () => {
+      for (const item of noise) {
+        await deleteReceiptItem(item.id);
+        await queueMutation('receipt_items', { id: item.id, deleted: true });
+      }
+      await recomputeProductStats();
+      await refresh();
+    })();
+  }, [id, rawItems, refresh]);
 
   if (!receipt) {
     return (
@@ -46,6 +83,77 @@ export default function ReceiptDetailScreen() {
   }
 
   const photo = hasLocalPhoto(receipt.photo_uri_or_drive_id);
+
+  const startEdit = (item: ReceiptItem) => {
+    setEditingId(item.id);
+    setDraftName(item.name);
+    setDraftQty(String(item.qty));
+    setDraftPrice(String(item.unit_price_aud));
+    setDraftTotal(String(item.line_total_aud));
+    setDraftCat(item.category_guess || '');
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+  };
+
+  const saveItem = async () => {
+    if (!editingId) return;
+    const name = draftName.trim();
+    if (!name) {
+      alert('Name required', 'Enter a product name.');
+      return;
+    }
+    if (isReceiptNoiseLine(name)) {
+      alert('Not a product', 'Totals / GST / payment lines can’t be saved as items.');
+      return;
+    }
+    const qty = Number(draftQty) || 1;
+    const unit = parseAmount(draftPrice);
+    const line = parseAmount(draftTotal) || unit * qty;
+    const existing = rawItems.find((i) => i.id === editingId);
+    if (!existing) return;
+
+    setBusy(true);
+    try {
+      const updated: ReceiptItem = {
+        ...existing,
+        name,
+        qty,
+        unit_price_aud: unit,
+        line_total_aud: line,
+        category_guess: draftCat.trim(),
+        updated_at: nowIso(),
+      };
+      await upsertReceiptItem(updated);
+      await queueMutation('receipt_items', updated);
+      await recomputeProductStats();
+      await refresh();
+      setEditingId(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeItem = (item: ReceiptItem) => {
+    confirm(
+      'Delete item?',
+      `Remove “${item.name}” from this receipt.`,
+      async () => {
+        setBusy(true);
+        try {
+          await deleteReceiptItem(item.id);
+          await queueMutation('receipt_items', { id: item.id, deleted: true });
+          if (editingId === item.id) setEditingId(null);
+          await recomputeProductStats();
+          await refresh();
+        } finally {
+          setBusy(false);
+        }
+      },
+      { confirmLabel: 'Delete', tone: 'danger' }
+    );
+  };
 
   const onDelete = () => {
     confirm(
@@ -103,25 +211,98 @@ export default function ReceiptDetailScreen() {
           <Text style={styles.empty}>No line items stored for this receipt.</Text>
         </GlassPanel>
       ) : (
-        items.map((item) => (
-          <GlassPanel key={item.id} style={styles.item}>
-            <View style={styles.itemIcon}>
-              <Ionicons name="cube-outline" size={18} color={Palette.cyan} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemMeta}>
-                Qty {item.qty}
-                {item.category_guess ? ` · ${item.category_guess}` : ''}
-              </Text>
-            </View>
-            <Text style={styles.itemAmt}>{formatAud(item.line_total_aud)}</Text>
-          </GlassPanel>
-        ))
+        items.map((item) => {
+          const editing = editingId === item.id;
+          return (
+            <GlassPanel key={item.id} style={styles.itemCard}>
+              {editing ? (
+                <View style={styles.editForm}>
+                  <Text style={styles.fieldLabel}>Product</Text>
+                  <TextInput
+                    value={draftName}
+                    onChangeText={setDraftName}
+                    style={styles.input}
+                    placeholderTextColor={Palette.textDim}
+                  />
+                  <View style={styles.editRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>Qty</Text>
+                      <TextInput
+                        value={draftQty}
+                        onChangeText={setDraftQty}
+                        keyboardType="decimal-pad"
+                        style={styles.input}
+                        placeholderTextColor={Palette.textDim}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>Unit AUD</Text>
+                      <TextInput
+                        value={draftPrice}
+                        onChangeText={setDraftPrice}
+                        keyboardType="decimal-pad"
+                        style={styles.input}
+                        placeholderTextColor={Palette.textDim}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>Line AUD</Text>
+                      <TextInput
+                        value={draftTotal}
+                        onChangeText={setDraftTotal}
+                        keyboardType="decimal-pad"
+                        style={styles.input}
+                        placeholderTextColor={Palette.textDim}
+                      />
+                    </View>
+                  </View>
+                  <Text style={styles.fieldLabel}>Category guess</Text>
+                  <TextInput
+                    value={draftCat}
+                    onChangeText={setDraftCat}
+                    style={styles.input}
+                    placeholderTextColor={Palette.textDim}
+                  />
+                  <View style={styles.editActions}>
+                    <Pressable onPress={cancelEdit} style={styles.ghostBtn}>
+                      <Text style={styles.ghostBtnText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={saveItem}
+                      disabled={busy}
+                      style={[styles.saveBtn, busy && { opacity: 0.6 }]}>
+                      <Text style={styles.saveBtnText}>{busy ? 'Saving…' : 'Save item'}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.itemRow}>
+                  <View style={styles.itemIcon}>
+                    <Ionicons name="cube-outline" size={18} color={Palette.cyan} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemMeta}>
+                      Qty {item.qty}
+                      {item.category_guess ? ` · ${item.category_guess}` : ''}
+                    </Text>
+                  </View>
+                  <Text style={styles.itemAmt}>{formatAud(item.line_total_aud)}</Text>
+                  <Pressable onPress={() => startEdit(item)} hitSlop={8} style={styles.iconBtn}>
+                    <Ionicons name="pencil-outline" size={18} color={Palette.cyan} />
+                  </Pressable>
+                  <Pressable onPress={() => removeItem(item)} hitSlop={8} style={styles.iconBtn}>
+                    <Ionicons name="trash-outline" size={18} color={Palette.coral} />
+                  </Pressable>
+                </View>
+              )}
+            </GlassPanel>
+          );
+        })
       )}
 
       <PrimaryButton
-        label={busy ? 'Deleting…' : 'Delete receipt'}
+        label={busy ? 'Working…' : 'Delete receipt'}
         variant="danger"
         onPress={onDelete}
         disabled={busy}
@@ -160,12 +341,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   empty: { color: Palette.textMuted },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: Spacing.sm,
-  },
+  itemCard: { marginBottom: Spacing.sm, gap: 8 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   itemIcon: {
     width: 36,
     height: 36,
@@ -177,5 +354,35 @@ const styles = StyleSheet.create({
   itemName: { color: Palette.text, fontWeight: '700' },
   itemMeta: { color: Palette.textDim, fontSize: 12, marginTop: 2 },
   itemAmt: { color: Palette.text, fontWeight: '800' },
+  iconBtn: { padding: 4 },
+  editForm: { gap: 6 },
+  fieldLabel: { color: Palette.textDim, fontSize: 11, fontWeight: '700' },
+  input: {
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    borderRadius: Radii.md,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: Palette.text,
+    backgroundColor: Palette.panelElevated,
+    fontSize: 14,
+  },
+  editRow: { flexDirection: 'row', gap: 8 },
+  editActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
+  ghostBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+  },
+  ghostBtnText: { color: Palette.textMuted, fontWeight: '700' },
+  saveBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: Radii.pill,
+    backgroundColor: Palette.cyan,
+  },
+  saveBtnText: { color: Palette.void, fontWeight: '800' },
   missing: { color: Palette.textMuted, marginBottom: Spacing.md },
 });

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -13,6 +14,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO } from 'date-fns';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
+import { CategoryChipRow } from '@/components/ui/CategoryChip';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
@@ -188,7 +190,10 @@ export default function FixedEditScreen() {
         ) : null}
 
         <Text style={styles.label}>Person</Text>
-        <View style={styles.row}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.hScroll}>
           {users.map((u) => {
             const on = userId === u.id;
             return (
@@ -201,16 +206,18 @@ export default function FixedEditScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         <Text style={styles.label}>Category</Text>
-        <View style={styles.row}>
-          {filteredCats.map((c) => (
-            <Pressable key={c.id} onPress={() => setCategoryId(c.id)}>
-              <Text style={[styles.chip, categoryId === c.id && styles.chipOn]}>{c.name}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {filteredCats.length === 0 ? (
+          <Text style={styles.emptyCats}>No matching categories for this direction.</Text>
+        ) : (
+          <CategoryChipRow
+            categories={filteredCats}
+            selectedId={categoryId}
+            onSelect={setCategoryId}
+          />
+        )}
 
         <PrimaryButton label="Save" onPress={save} />
       </GlassPanel>
@@ -247,6 +254,7 @@ const styles = StyleSheet.create({
   },
   dateHint: { color: Palette.cyan, fontSize: 12 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  hScroll: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
   chip: {
     color: Palette.textMuted,
     backgroundColor: Palette.panelElevated,
@@ -271,5 +279,6 @@ const styles = StyleSheet.create({
   personChipOn: { backgroundColor: Palette.cyan, borderColor: Palette.cyan },
   personChipText: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
   personChipTextOn: { color: Palette.void },
+  emptyCats: { color: Palette.textDim, fontSize: 12 },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

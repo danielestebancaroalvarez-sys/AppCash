@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
+import { CategoryChipRow } from '@/components/ui/CategoryChip';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { parseAmount } from '@/lib/money';
-import { nowIso } from '@/lib/dates';
+import { nowIso, todayIsoDate } from '@/lib/dates';
 import { upsertTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
 import type { TransactionType } from '@/types/models';
@@ -41,6 +42,11 @@ export default function TransactionEditScreen() {
   const [userId, setUserId] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
+    [categories]
+  );
+
   useEffect(() => {
     if (!existing) return;
     setAmount(String(existing.amount_aud));
@@ -69,6 +75,12 @@ export default function TransactionEditScreen() {
       alert('Missing fields', 'Enter amount and date (yyyy-MM-dd).');
       return;
     }
+    const today = todayIsoDate();
+    const dateIso = date.slice(0, 10);
+    if (dateIso > today) {
+      alert('Invalid date', 'Future dates are not allowed. Use today or a past date.');
+      return;
+    }
     setBusy(true);
     try {
       const updated = {
@@ -76,7 +88,7 @@ export default function TransactionEditScreen() {
         amount_aud: value,
         merchant: merchant.trim(),
         note: note.trim(),
-        date: date.slice(0, 10),
+        date: dateIso,
         type,
         category_id: categoryId || existing.category_id,
         user_id: userId || existing.user_id,
@@ -126,25 +138,29 @@ export default function TransactionEditScreen() {
         />
 
         <Text style={styles.label}>Type</Text>
-        <View style={styles.row}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.hScroll}>
           {TYPES.map((t) => (
             <Pressable key={t.id} onPress={() => setType(t.id)}>
               <Text style={[styles.chip, type === t.id && styles.chipOn]}>{t.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
 
         <Text style={styles.label}>Category</Text>
-        <View style={styles.row}>
-          {categories.map((c) => (
-            <Pressable key={c.id} onPress={() => setCategoryId(c.id)}>
-              <Text style={[styles.chip, categoryId === c.id && styles.chipOn]}>{c.name}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <CategoryChipRow
+          categories={sortedCategories}
+          selectedId={categoryId}
+          onSelect={setCategoryId}
+        />
 
         <Text style={styles.label}>Registered by</Text>
-        <View style={styles.row}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.hScroll}>
           {users.map((u) => {
             const on = userId === u.id;
             return (
@@ -157,7 +173,7 @@ export default function TransactionEditScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         <PrimaryButton label={busy ? 'Saving…' : 'Save'} onPress={save} disabled={busy} />
       </GlassPanel>
@@ -177,7 +193,7 @@ const styles = StyleSheet.create({
     color: Palette.text,
     backgroundColor: Palette.panelElevated,
   },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  hScroll: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
   chip: {
     color: Palette.textMuted,
     backgroundColor: Palette.panelElevated,
