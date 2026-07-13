@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -67,6 +75,7 @@ export default function AddScreen() {
   const [categoryId, setCategoryId] = useState('');
   const [userId, setUserId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const modeMeta = MODES.find((m) => m.id === mode)!;
 
@@ -156,10 +165,12 @@ export default function AddScreen() {
       if (result.canceled || !result.assets[0]) return;
 
       const uri = result.assets[0].uri;
+      setAnalyzing(true);
       let parsed;
       try {
         parsed = await parseReceiptImage(uri);
       } catch (e) {
+        setAnalyzing(false);
         confirm(
           'Receipt scan',
           e instanceof Error ? e.message : 'Could not parse receipt',
@@ -189,6 +200,7 @@ export default function AddScreen() {
         },
       });
     } finally {
+      setAnalyzing(false);
       setBusy(false);
     }
   };
@@ -423,7 +435,7 @@ export default function AddScreen() {
               (pressed || busy) && { opacity: 0.85 },
             ]}>
             <Ionicons name="camera" size={20} color={Palette.void} />
-            <Text style={styles.saveLabel}>{busy ? 'Reading…' : 'Take photo'}</Text>
+            <Text style={styles.saveLabel}>{analyzing ? 'Reading…' : 'Take photo'}</Text>
           </Pressable>
           <Pressable
             disabled={busy}
@@ -431,10 +443,12 @@ export default function AddScreen() {
             style={({ pressed }) => [
               styles.ghostBtn,
               { borderColor: modeMeta.color },
-              pressed && { opacity: 0.85 },
+              (pressed || busy) && { opacity: 0.85 },
             ]}>
             <Ionicons name="images-outline" size={18} color={modeMeta.color} />
-            <Text style={[styles.ghostLabel, { color: modeMeta.color }]}>Choose from gallery</Text>
+            <Text style={[styles.ghostLabel, { color: modeMeta.color }]}>
+              {analyzing ? 'Reading…' : 'Choose from gallery'}
+            </Text>
           </Pressable>
           <Pressable
             onPress={() => router.push('/receipts' as never)}
@@ -444,6 +458,16 @@ export default function AddScreen() {
           </Pressable>
         </Section>
       )}
+
+      <Modal visible={analyzing} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.analyzingOverlay}>
+          <View style={styles.analyzingCard}>
+            <ActivityIndicator size="large" color={Palette.cyan} />
+            <Text style={styles.analyzingTitle}>Reading receipt…</Text>
+            <Text style={styles.analyzingHint}>AI is extracting store, date and line items</Text>
+          </View>
+        </View>
+      </Modal>
 
       {Dialog}
     </Screen>
@@ -662,6 +686,38 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   viewReceiptsText: { color: Palette.cyan, fontWeight: '700', fontSize: 13 },
+  analyzingOverlay: {
+    flex: 1,
+    backgroundColor: Palette.overlay,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  analyzingCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: Palette.panelElevated,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  analyzingTitle: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '800',
+    fontSize: 17,
+    marginTop: Spacing.sm,
+  },
+  analyzingHint: {
+    color: Palette.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   receiptHero: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
   receiptBlob: {
     width: 88,

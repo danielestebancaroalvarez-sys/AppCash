@@ -353,15 +353,16 @@ async function parseWithNvidia(imageUri: string): Promise<ParsedReceipt> {
 
   const base64 = await readImageBase64(imageUri);
   const preferred = process.env.EXPO_PUBLIC_NVIDIA_MODEL?.trim();
+  // Prefer Nano VL (doc/OCR-oriented, smaller) over Llama 3.2 11B which is slow on free NIM.
   const models = [
     preferred,
+    'nvidia/llama-3.1-nemotron-nano-vl-8b-v1',
     'meta/llama-3.2-11b-vision-instruct',
-    'microsoft/phi-3.5-vision-instruct',
   ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
 
   const bodyBase = {
     temperature: 0.1,
-    max_tokens: 2048,
+    max_tokens: 1024,
     messages: [
       {
         role: 'user' as const,
