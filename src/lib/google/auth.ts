@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import {
   GoogleSignin,
   isErrorWithCode,
@@ -10,15 +11,32 @@ import type { GoogleSession } from '@/types/models';
 
 const SESSION_KEY = 'appcash_google_session';
 
+/** Release keystore SHA-1 (credentials/android/appcash.jks) — must match Google Cloud Android OAuth client. */
+export const ANDROID_RELEASE_SHA1 = '5A:E2:53:7E:BA:1E:27:75:66:8F:3B:D6:11:C8:B0:73:CB:8A:92:6C';
+/** Debug keystore SHA-1 (android/app/debug.keystore). */
+export const ANDROID_DEBUG_SHA1 = '5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25';
+
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive.file',
 ];
 
 export function getGoogleClientIds() {
+  const extra = (Constants.expoConfig?.extra ?? {}) as {
+    googleWebClientId?: string;
+    googleAndroidClientId?: string;
+  };
   return {
-    webClientId: (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '').trim(),
-    androidClientId: (process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '').trim(),
+    webClientId: (
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
+      extra.googleWebClientId ??
+      ''
+    ).trim(),
+    androidClientId: (
+      process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ??
+      extra.googleAndroidClientId ??
+      ''
+    ).trim(),
   };
 }
 
@@ -29,6 +47,8 @@ export function getGoogleClientIds() {
 export function isGoogleConfigured(): boolean {
   const { webClientId, androidClientId } = getGoogleClientIds();
   if (Platform.OS === 'android') {
+    // Android OAuth client must exist in Cloud Console; ID string is also required here
+    // so misconfigured release builds fail early with a clear message.
     return Boolean(webClientId && androidClientId);
   }
   return Boolean(webClientId);
@@ -166,11 +186,12 @@ export async function signInWithGoogleNative(): Promise<GoogleSignInResult> {
           return {
             ok: false,
             message:
-              'DEVELOPER_ERROR: el SHA-1 del Android OAuth Client no coincide con este build.\n\n' +
-              'En Google Cloud → Credentials → tu cliente Android, usa:\n' +
+              'DEVELOPER_ERROR: Android OAuth SHA-1 does not match this APK.\n\n' +
+              'Google Cloud → Credentials → Android OAuth client:\n' +
               'Package: com.deco2449584.appcash\n' +
-              'SHA-1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25\n\n' +
-              '(Es el debug.keystore de android/app, no el de ~/.android)',
+              `Release SHA-1: ${ANDROID_RELEASE_SHA1}\n` +
+              `Debug SHA-1: ${ANDROID_DEBUG_SHA1}\n\n` +
+              'Add BOTH fingerprints (or create two Android clients), wait a few minutes, reinstall the app.',
           };
         default:
           return { ok: false, message: error.message || `Google error (${error.code})` };

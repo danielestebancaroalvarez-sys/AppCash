@@ -8,11 +8,13 @@ import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import {
   getDeepSeekApiKey,
   getGeminiApiKey,
+  getNvidiaApiKey,
   getOpenRouterApiKey,
   getOcrSpaceApiKey,
   getReceiptProvider,
   setDeepSeekApiKey,
   setGeminiApiKey,
+  setNvidiaApiKey,
   setOpenRouterApiKey,
   setOcrSpaceApiKey,
   setReceiptProvider,
@@ -32,6 +34,13 @@ const PROVIDERS: Array<{
     hint: 'Free vision models — openrouter.ai',
     icon: 'planet-outline',
     color: Palette.cyan,
+  },
+  {
+    id: 'nvidia',
+    label: 'NVIDIA',
+    hint: 'Free NIM APIs — build.nvidia.com',
+    icon: 'hardware-chip-outline',
+    color: Palette.teal,
   },
   {
     id: 'deepseek',
@@ -55,6 +64,7 @@ export default function AccountAiScreen() {
   const [openrouter, setOpenrouter] = useState('');
   const [deepseek, setDeepseek] = useState('');
   const [gemini, setGemini] = useState('');
+  const [nvidia, setNvidia] = useState('');
   const [ocrSpace, setOcrSpace] = useState('');
 
   useEffect(() => {
@@ -63,6 +73,7 @@ export default function AccountAiScreen() {
       setOpenrouter(await getOpenRouterApiKey());
       setDeepseek(await getDeepSeekApiKey());
       setGemini(await getGeminiApiKey());
+      setNvidia(await getNvidiaApiKey());
       const ocr = await getOcrSpaceApiKey();
       setOcrSpace(ocr === 'helloworld' ? '' : ocr);
     })();
@@ -73,6 +84,7 @@ export default function AccountAiScreen() {
     await setOpenRouterApiKey(openrouter);
     await setDeepSeekApiKey(deepseek);
     await setGeminiApiKey(gemini);
+    await setNvidiaApiKey(nvidia);
     if (ocrSpace.trim()) await setOcrSpaceApiKey(ocrSpace);
     alert('Saved', `Receipt AI provider: ${provider}`);
   };
@@ -80,8 +92,8 @@ export default function AccountAiScreen() {
   return (
     <Screen tabAware={false}>
       <Text style={styles.lead}>
-        Keys stay on this phone. OpenRouter can read receipt photos directly; DeepSeek needs OCR
-        first.
+        Keys stay on this phone. OpenRouter and NVIDIA can read receipt photos directly; DeepSeek
+        needs OCR first.
       </Text>
 
       <Text style={styles.section}>Provider</Text>
@@ -148,6 +160,18 @@ export default function AccountAiScreen() {
             value={gemini}
             onChangeText={setGemini}
             placeholder="Gemini API key"
+            placeholderTextColor={Palette.textDim}
+            secureTextEntry
+            autoCapitalize="none"
+            style={styles.input}
+          />
+        ) : null}
+
+        {provider === 'nvidia' ? (
+          <TextInput
+            value={nvidia}
+            onChangeText={setNvidia}
+            placeholder="NVIDIA API key (nvapi-…)"
             placeholderTextColor={Palette.textDim}
             secureTextEntry
             autoCapitalize="none"

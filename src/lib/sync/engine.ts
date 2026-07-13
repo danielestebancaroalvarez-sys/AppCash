@@ -99,12 +99,13 @@ export async function ensureSpreadsheet(): Promise<string | null> {
   return session.spreadsheetId;
 }
 
-export async function createAndLinkSpreadsheet(): Promise<string | null> {
+export async function createAndLinkSpreadsheet(title?: string): Promise<string | null> {
   const session = await loadGoogleSession();
   if (!session?.accessToken) return null;
   if (session.spreadsheetId) return session.spreadsheetId;
 
-  const id = await createAppSpreadsheet(session.accessToken);
+  const trimmed = title?.trim() || 'AppCash';
+  const id = await createAppSpreadsheet(session.accessToken, trimmed);
   await saveGoogleSession({ ...session, spreadsheetId: id });
   await setSetting('spreadsheet_id', id);
   try {

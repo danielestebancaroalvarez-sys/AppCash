@@ -65,7 +65,8 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "build:apk": "eas build -p android --profile preview --non-interactive",
-    "build:android:apk": "eas build -p android --profile preview --non-interactive"
+    "build:android:apk": "eas build -p android --profile preview --non-interactive",
+    "build:android:production": "eas build -p android --profile production --non-interactive"
   },
   "private": true
 }

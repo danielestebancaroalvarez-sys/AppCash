@@ -22,6 +22,7 @@ export default function AccountSheetsScreen() {
   const { alert, confirm, Dialog } = useAppDialog();
 
   const [sheetInput, setSheetInput] = useState(session?.spreadsheetId ?? '');
+  const [sheetName, setSheetName] = useState('AppCash');
   const [busy, setBusy] = useState(false);
   const hasSheet = Boolean(session?.spreadsheetId);
 
@@ -48,9 +49,10 @@ export default function AccountSheetsScreen() {
       alert('Google required', 'Sign in with Google first.');
       return;
     }
+    const name = sheetName.trim() || 'AppCash';
     setBusy(true);
     try {
-      const id = await createAndLinkSpreadsheet();
+      const id = await createAndLinkSpreadsheet(name);
       if (id) {
         setSheetInput(id);
         const s = await loadGoogleSession();
@@ -58,7 +60,7 @@ export default function AccountSheetsScreen() {
         await refresh();
         alert(
           'Sheet ready',
-          'Created editable tabs (Users, Categories, Fixed, Purchases, Savings) plus _sys_ backups.'
+          `"${name}" created with tabs Users, Categories, Fixed, Purchases, Savings plus _sys_ backups.`
         );
       }
     } catch (e) {
@@ -176,8 +178,17 @@ export default function AccountSheetsScreen() {
               variant="ghost"
               disabled={busy}
             />
+            <Text style={[styles.label, { marginTop: Spacing.md }]}>New spreadsheet name</Text>
+            <TextInput
+              value={sheetName}
+              onChangeText={setSheetName}
+              placeholder="AppCash"
+              placeholderTextColor={Palette.textDim}
+              style={styles.input}
+              autoCorrect={false}
+            />
             <PrimaryButton
-              label="Create AppCash spreadsheet"
+              label={busy ? 'Creating…' : 'Create spreadsheet'}
               onPress={createSheet}
               variant="ghost"
               disabled={busy}

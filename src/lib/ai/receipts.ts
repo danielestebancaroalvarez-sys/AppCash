@@ -3,13 +3,14 @@ import * as SecureStore from 'expo-secure-store';
 import type { ParsedReceipt } from '@/types/models';
 import { todayIsoDate } from '@/lib/dates';
 
-export type ReceiptAiProvider = 'openrouter' | 'deepseek' | 'gemini';
+export type ReceiptAiProvider = 'openrouter' | 'deepseek' | 'gemini' | 'nvidia';
 
 const KEYS = {
   provider: 'appcash_receipt_ai_provider',
   openrouter: 'appcash_openrouter_api_key',
   deepseek: 'appcash_deepseek_api_key',
   gemini: 'appcash_gemini_api_key',
+  nvidia: 'appcash_nvidia_api_key',
   ocrSpace: 'appcash_ocrspace_api_key',
 } as const;
 
@@ -34,11 +35,19 @@ Use AUD amounts. If date unknown use ${today}. Ignore loyalty points.`;
 
 export async function getReceiptProvider(): Promise<ReceiptAiProvider> {
   const stored = await SecureStore.getItemAsync(KEYS.provider);
-  if (stored === 'openrouter' || stored === 'deepseek' || stored === 'gemini') return stored;
+  if (
+    stored === 'openrouter' ||
+    stored === 'deepseek' ||
+    stored === 'gemini' ||
+    stored === 'nvidia'
+  ) {
+    return stored;
+  }
   // Prefer whatever key is available
   if (await getOpenRouterApiKey()) return 'openrouter';
   if (await getDeepSeekApiKey()) return 'deepseek';
   if (await getGeminiApiKey()) return 'gemini';
+  if (await getNvidiaApiKey()) return 'nvidia';
   return 'openrouter';
 }
 
@@ -80,6 +89,18 @@ export async function getGeminiApiKey(): Promise<string> {
 
 export async function setGeminiApiKey(key: string): Promise<void> {
   await SecureStore.setItemAsync(KEYS.gemini, key.trim());
+}
+
+export async function getNvidiaApiKey(): Promise<string> {
+  return (
+    (await SecureStore.getItemAsync(KEYS.nvidia)) ||
+    process.env.EXPO_PUBLIC_NVIDIA_API_KEY ||
+    ''
+  );
+}
+
+export async function setNvidiaApiKey(key: string): Promise<void> {
+  await SecureStore.setItemAsync(KEYS.nvidia, key.trim());
 }
 
 export async function getOcrSpaceApiKey(): Promise<string> {
@@ -321,6 +342,75 @@ async function parseWithGemini(imageUri: string): Promise<ParsedReceipt> {
   return normalizeParsed(extractJson(text) as ParsedReceipt);
 }
 
+/** NVIDIA NIM hosted API (build.nvidia.com) — OpenAI-compatible vision models. */
+async function parseWithNvidia(imageUri: string): Promise<ParsedReceipt> {
+  const apiKey = await getNvidiaApiKey();
+  if (!apiKey) {
+    throw new Error(
+      'Add an NVIDIA API key in Settings (free at build.nvidia.com — Get API Key).'
+    );
+  }
+
+  const base64 = await readImageBase64(imageUri);
+  const preferred = process.env.EXPO_PUBLIC_NVIDIA_MODEL?.trim();
+  const models = [
+    preferred,
+    'meta/llama-3.2-11b-vision-instruct',
+    'microsoft/phi-3.5-vision-instruct',
+  ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
+
+  const bodyBase = {
+    temperature: 0.1,
+    max_tokens: 2048,
+    messages: [
+      {
+        role: 'user' as const,
+        content: [
+          { type: 'text' as const, text: RECEIPT_PROMPT(todayIsoDate()) },
+          {
+            type: 'image_url' as const,
+            image_url: { url: `data:image/jpeg;base64,${base64}` },
+          },
+        ],
+      },
+    ],
+  };
+
+  let lastError = 'No NVIDIA vision model available';
+  for (const model of models) {
+    const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ ...bodyBase, model }),
+    });
+
+    if (!res.ok) {
+      lastError = await res.text();
+      if (res.status === 404 || res.status === 429 || res.status === 503) continue;
+      throw new Error(`NVIDIA NIM error: ${lastError}`);
+    }
+
+    const data = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const text = data.choices?.[0]?.message?.content ?? '';
+    if (!text.trim()) {
+      lastError = `Empty response from ${model}`;
+      continue;
+    }
+    return normalizeParsed(extractJson(text) as ParsedReceipt);
+  }
+
+  throw new Error(
+    `NVIDIA NIM: no vision model worked. Last error: ${lastError}\n\n` +
+      'Get a free key at build.nvidia.com, or set EXPO_PUBLIC_NVIDIA_MODEL to a vision model from the catalog.'
+  );
+}
+
 /** Main entry — uses the provider selected in Settings. */
 export async function parseReceiptImage(imageUri: string): Promise<ParsedReceipt> {
   const provider = await getReceiptProvider();
@@ -329,6 +419,8 @@ export async function parseReceiptImage(imageUri: string): Promise<ParsedReceipt
       return parseWithDeepSeek(imageUri);
     case 'gemini':
       return parseWithGemini(imageUri);
+    case 'nvidia':
+      return parseWithNvidia(imageUri);
     case 'openrouter':
     default:
       return parseWithOpenRouter(imageUri);
