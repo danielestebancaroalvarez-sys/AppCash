@@ -5,7 +5,9 @@ import { getWeekRange, inRange } from '@/lib/dates';
 import { prorateWeekly } from '@/lib/dashboard/prorate';
 import { recommendUpcoming } from '@/lib/insights/market';
 import type { AppUser, Category, FixedItem, SavingsGoal, Transaction } from '@/types/models';
-import { Palette } from '@/constants/theme';
+import { Palette, CategoryPalette } from '@/constants/theme';
+import { isLikelyProductName, isPurchaseLevelTransaction } from '@/lib/purchases/filter';
+import { marketCategoryColor, categorizeProduct } from '@/lib/insights/categories';
 
 export type CategorySegment = { id: string; label: string; value: number; color: string };
 
@@ -51,7 +53,7 @@ export type PeriodStats = {
   marketThisWeek: number;
   marketAverage: number;
   marketWeekBars: Array<{ label: string; value: number }>;
-  marketTopCategories: Array<{ label: string; value: number; pct: number }>;
+  marketTopCategories: Array<{ label: string; value: number; pct: number; color: string }>;
   goals: SavingsGoal[];
   upcomingBuys: ReturnType<typeof recommendUpcoming>;
 };
@@ -98,11 +100,12 @@ export function usePeriodStats(): PeriodStats {
 
   return useMemo(() => {
     const weekTx = transactions.filter((t) => inRange(t.date, start, end));
-    const incomeSporadic = weekTx.filter(isIncomeTx).reduce((a, t) => a + t.amount_aud, 0);
-    const expenseVariable = weekTx
+    const weekPurchases = weekTx.filter(isPurchaseLevelTransaction);
+    const incomeSporadic = weekPurchases.filter(isIncomeTx).reduce((a, t) => a + t.amount_aud, 0);
+    const expenseVariable = weekPurchases
       .filter((t) => t.type === 'expense_sporadic' || t.type === 'variable')
       .reduce((a, t) => a + t.amount_aud, 0);
-    const savingsContrib = weekTx
+    const savingsContrib = weekPurchases
       .filter((t) => t.type === 'savings_contrib')
       .reduce((a, t) => a + t.amount_aud, 0);
     const incomeFixed = fixedItems
@@ -118,35 +121,42 @@ export function usePeriodStats(): PeriodStats {
     const free = Math.max(0, incomeTotal - expenseFixed - expenseVariable - savingsContrib);
 
     const byCat = new Map<string, number>();
-    for (const t of weekTx.filter(
+    for (const t of weekPurchases.filter(
       (x) => x.type === 'expense_sporadic' || x.type === 'variable' || x.type === 'fixed'
     )) {
       byCat.set(t.category_id, (byCat.get(t.category_id) ?? 0) + t.amount_aud);
     }
     const segments: CategorySegment[] = [...byCat.entries()]
-      .map(([id, value]) => {
+      .map(([id, value], i) => {
         const cat = categories.find((c) => c.id === id);
         return {
           id,
           label: cat?.name ?? 'Other',
           value,
-          color: cat?.color ?? Palette.violet,
+          color: CategoryPalette[i % CategoryPalette.length],
         };
       })
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
 
+    // Re-assign colors after sort so rank 1 gets first palette color
+    segments.forEach((s, i) => {
+      s.color = CategoryPalette[i % CategoryPalette.length];
+    });
+
     const days = eachDayOfInterval({ start, end });
     const dailyBars = days.map((d) => {
       const key = format(d, 'yyyy-MM-dd');
-      const value = weekTx
+      const value = weekPurchases
         .filter((t) => t.date === key && !isIncomeTx(t))
         .reduce((a, t) => a + t.amount_aud, 0);
       return { label: format(d, 'EEE').slice(0, 2), value };
     });
 
     const byUser: PersonSpend[] = users.map((u) => {
-      const userTx = weekTx.filter((t) => t.user_id === u.id && !isIncomeTx(t) && t.type !== 'savings_contrib');
+      const userTx = weekPurchases.filter(
+        (t) => t.user_id === u.id && !isIncomeTx(t) && t.type !== 'savings_contrib'
+      );
       const spent = userTx.reduce((a, t) => a + t.amount_aud, 0);
       const planned = userTx.filter((t) => t.type === 'fixed').reduce((a, t) => a + t.amount_aud, 0);
       const extra = userTx
@@ -157,9 +167,9 @@ export function usePeriodStats(): PeriodStats {
         catMap.set(t.category_id, (catMap.get(t.category_id) ?? 0) + t.amount_aud);
       }
       const cats = [...catMap.entries()]
-        .map(([id, value]) => {
+        .map(([id, value], i) => {
           const cat = categories.find((c) => c.id === id);
-          return { label: cat?.name ?? 'Other', value, color: cat?.color ?? Palette.violet };
+          return { label: cat?.name ?? 'Other', value, color: CategoryPalette[i % CategoryPalette.length] };
         })
         .sort((a, b) => b.value - a.value)
         .slice(0, 4);
@@ -188,8 +198,21 @@ export function usePeriodStats(): PeriodStats {
     }
 
     const merchantMap = new Map<string, number>();
-    for (const t of weekTx.filter((x) => !isIncomeTx(x) && x.type !== 'savings_contrib')) {
+    // Prefer real stores from receipts
+    for (const r of receipts.filter((x) => inRange(x.purchased_at.slice(0, 10), start, end))) {
+      const name = (r.store || 'Supermarket').trim() || 'Supermarket';
+      merchantMap.set(name, (merchantMap.get(name) ?? 0) + r.total_aud);
+    }
+    // Plus purchase-level expenses (not product line leftovers)
+    for (const t of weekPurchases.filter(
+      (x) =>
+        !isIncomeTx(x) &&
+        x.type !== 'savings_contrib' &&
+        !x.receipt_id &&
+        isPurchaseLevelTransaction(x)
+    )) {
       const name = (t.merchant || 'Other').trim() || 'Other';
+      if (isLikelyProductName(name)) continue;
       merchantMap.set(name, (merchantMap.get(name) ?? 0) + t.amount_aud);
     }
     const topMerchants = [...merchantMap.entries()]
@@ -236,10 +259,11 @@ export function usePeriodStats(): PeriodStats {
     }
     const marketCatTotal = [...catGuess.values()].reduce((a, b) => a + b, 0) || 1;
     const marketTopCategories = [...catGuess.entries()]
-      .map(([label, value]) => ({
+      .map(([label, value], i) => ({
         label,
         value,
         pct: Math.round((value / marketCatTotal) * 100),
+        color: marketCategoryColor(categorizeProduct(label, label), i),
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);

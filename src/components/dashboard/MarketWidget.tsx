@@ -13,8 +13,8 @@ export function MarketWidget({ stats }: { stats: PeriodStats }) {
 
   return (
     <CollapsibleWidget
-      accent={Palette.cyan}
-      header={<WidgetTitle icon="cart-outline" title="Market" />}
+      accent={Palette.teal}
+      header={<WidgetTitle icon="cart-outline" title="Market" iconColor={Palette.teal} />}
       headerActions={
         <Pressable onPress={() => router.push('/insights' as never)} hitSlop={8}>
           <Text style={styles.seeMore}>See more</Text>
@@ -37,7 +37,7 @@ export function MarketWidget({ stats }: { stats: PeriodStats }) {
       </View>
 
       <Text style={styles.section}>Weekly spending (last weeks)</Text>
-      <MiniWeekBars values={stats.marketWeekBars} />
+      <MiniWeekBars values={stats.marketWeekBars} color={Palette.teal} />
 
       <Text style={styles.section}>Top categories</Text>
       {stats.marketTopCategories.length === 0 ? (
@@ -45,6 +45,7 @@ export function MarketWidget({ stats }: { stats: PeriodStats }) {
       ) : (
         stats.marketTopCategories.map((c) => (
           <View key={c.label} style={styles.catRow}>
+            <View style={[styles.catDot, { backgroundColor: c.color ?? Palette.cyan }]} />
             <Text style={styles.catName}>{c.label}</Text>
             <Text style={styles.catAmt}>
               {formatAud(c.value)} ({c.pct}%)
@@ -81,11 +82,14 @@ const styles = StyleSheet.create({
   empty: { color: Palette.textMuted, fontSize: 12 },
   catRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Palette.stroke,
   },
+  catDot: { width: 8, height: 8, borderRadius: 4 },
   catName: { color: Palette.text, fontSize: 13, flex: 1 },
   catAmt: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
   linkRow: {

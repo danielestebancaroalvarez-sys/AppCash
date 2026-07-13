@@ -163,7 +163,13 @@ export function TrendGroupedBars({
   );
 }
 
-export function MiniWeekBars({ values }: { values: Array<{ label: string; value: number }> }) {
+export function MiniWeekBars({
+  values,
+  color = Palette.teal,
+}: {
+  values: Array<{ label: string; value: number }>;
+  color?: string;
+}) {
   const max = Math.max(...values.map((v) => v.value), 1);
   return (
     <View style={styles.miniBars}>
@@ -171,7 +177,9 @@ export function MiniWeekBars({ values }: { values: Array<{ label: string; value:
         const h = v.value > 0 ? Math.max(6, (v.value / max) * 48) : 3;
         return (
           <View key={`${v.label}-${i}`} style={styles.miniCol}>
-            <View style={[styles.miniBar, { height: h, opacity: v.value > 0 ? 1 : 0.35 }]} />
+            <View
+              style={[styles.miniBar, { height: h, opacity: v.value > 0 ? 1 : 0.35, backgroundColor: color }]}
+            />
             <Text style={styles.miniLabel}>{v.label}</Text>
           </View>
         );
@@ -180,7 +188,13 @@ export function MiniWeekBars({ values }: { values: Array<{ label: string; value:
   );
 }
 
-export function PlainDailyBars({ values }: { values: Array<{ label: string; value: number }> }) {
+export function PlainDailyBars({
+  values,
+  color = Palette.amber,
+}: {
+  values: Array<{ label: string; value: number }>;
+  color?: string;
+}) {
   const max = Math.max(...values.map((v) => v.value), 1);
   return (
     <View style={styles.dailyBars}>
@@ -189,7 +203,7 @@ export function PlainDailyBars({ values }: { values: Array<{ label: string; valu
         return (
           <View key={v.label} style={styles.dailyCol}>
             <Svg width={28} height={110}>
-              <Rect x={4} y={110 - h} width={20} height={h} rx={8} fill={Palette.cyan} opacity={0.85} />
+              <Rect x={4} y={110 - h} width={20} height={h} rx={8} fill={color} opacity={0.85} />
             </Svg>
             <Text style={styles.miniLabel}>{v.label}</Text>
           </View>
@@ -245,7 +259,6 @@ const styles = StyleSheet.create({
     width: '70%',
     maxWidth: 14,
     borderRadius: 4,
-    backgroundColor: Palette.cyan,
     marginBottom: 4,
   },
   miniLabel: { color: Palette.textDim, fontSize: 9 },

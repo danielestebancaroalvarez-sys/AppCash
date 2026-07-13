@@ -52,6 +52,8 @@ import {
 } from '@/lib/db';
 import { createId } from '@/lib/id';
 import { nowIso } from '@/lib/dates';
+import { isLikelyProductName } from '@/lib/purchases/filter';
+import { CategoryPalette } from '@/constants/theme';
 import { ensureHouseholdDefaults } from '@/lib/db/seed';
 import type {
   AppNotification,
@@ -326,7 +328,7 @@ async function resolveCategoryId(
     name: categoria.trim() || 'Extras',
     type: asCategoryType(hintType),
     icon: 'tag',
-    color: '#8B7CFF',
+    color: CategoryPalette[cache.length % CategoryPalette.length],
     is_system: false,
     updated_at: nowIso(),
   };
@@ -377,12 +379,12 @@ export async function pullFromSheets(): Promise<boolean> {
   // 2) Categories
   const catRows = parseCategoriaRows(all.Categories ?? []);
   if (catRows.length > 0) {
-    const cats: Category[] = catRows.map((r) => ({
+    const cats: Category[] = catRows.map((r, i) => ({
       id: r.id || createId(),
       name: r.name || 'Category',
       type: asCategoryType(r.type),
       icon: r.icon || 'tag',
-      color: r.color || '#8B7CFF',
+      color: r.color || CategoryPalette[i % CategoryPalette.length],
       is_system: false,
       updated_at: nowIso(),
     }));
@@ -418,27 +420,86 @@ export async function pullFromSheets(): Promise<boolean> {
   users = await listUsers();
   categories = await listCategories();
 
-  // 4) Purchases → transactions
+  // System receipts first — Purchases sheet also lists line items and must not wipe real txs.
+  const recibos = parseSysTable(all._sys_receipts ?? [], (o) => ({
+    id: o.id,
+    user_id: o.user_id,
+    store: o.store,
+    total_aud: Number(o.total_aud) || 0,
+    photo_uri_or_drive_id: o.photo_uri_or_drive_id,
+    purchased_at: o.purchased_at,
+    raw_gemini_json: o.raw_gemini_json,
+    updated_at: o.updated_at || nowIso(),
+  })) as Receipt[];
+  if (recibos.length) await replaceSheetRows('receipts', recibos, upsertReceipt);
+
+  const receiptItemsRows = parseSysTable(all._sys_receipt_items ?? [], (o) => ({
+    id: o.id,
+    receipt_id: o.receipt_id,
+    name: o.name,
+    qty: Number(o.qty) || 0,
+    unit_price_aud: Number(o.unit_price_aud) || 0,
+    line_total_aud: Number(o.line_total_aud) || 0,
+    category_guess: o.category_guess,
+    updated_at: o.updated_at || nowIso(),
+  })) as ReceiptItem[];
+  if (receiptItemsRows.length) {
+    await replaceSheetRows('receipt_items', receiptItemsRows, upsertReceiptItem);
+  }
+
+  const receiptItemIds = new Set(receiptItemsRows.map((i) => i.id));
+  const grocery =
+    categories.find((c) => c.name.toLowerCase() === 'groceries') ??
+    categories.find((c) => c.type === 'expense') ??
+    categories[0];
+
+  // 4) Build purchase-level transactions (one per receipt + standalone expenses)
   const compras = parseCompraRows(all.Purchases ?? []);
-  if (compras.length > 0) {
-    const txs: Transaction[] = [];
-    for (const row of compras) {
-      const date = row.date || nowIso().slice(0, 10);
-      const time = (row.time || '12:00').slice(0, 5);
-      txs.push({
-        id: row.id || createId(),
-        user_id: await resolveUserId(row.who, users),
-        type: labelToTxType(row.item),
-        category_id: await resolveCategoryId(row.category, row.item, categories),
-        amount_aud: row.line_total || row.unit_price * (row.qty || 1),
-        date,
-        note: row.item,
-        merchant: row.item,
-        receipt_id: '',
-        created_at: `${date}T${time}:00`,
-        updated_at: nowIso(),
-      });
-    }
+  const txs: Transaction[] = [];
+
+  for (const receipt of recibos) {
+    const purchased = receipt.purchased_at || nowIso();
+    const date = purchased.slice(0, 10);
+    const time = purchased.includes('T') ? purchased.slice(11, 16) : '12:00';
+    txs.push({
+      id: `tx_${receipt.id}`,
+      user_id: receipt.user_id || users[0]?.id || createId(),
+      type: 'expense_sporadic',
+      category_id: grocery?.id || '',
+      amount_aud: receipt.total_aud,
+      date,
+      note: `Receipt ${receipt.store || ''}`.trim(),
+      merchant: receipt.store || 'Supermarket',
+      receipt_id: receipt.id,
+      created_at: `${date}T${time}:00`,
+      updated_at: nowIso(),
+    });
+  }
+
+  for (const row of compras) {
+    if (!row.id || receiptItemIds.has(row.id)) continue;
+    if (txs.some((t) => t.id === row.id || t.id === `tx_${row.id}`)) continue;
+    const date = row.date || nowIso().slice(0, 10);
+    const time = (row.time || '12:00').slice(0, 5);
+    const label = row.item || 'Purchase';
+    // Skip product line leftovers (receipt lines already handled via _sys_receipt_items)
+    if (isLikelyProductName(label)) continue;
+    txs.push({
+      id: row.id,
+      user_id: await resolveUserId(row.who, users),
+      type: labelToTxType(row.item),
+      category_id: await resolveCategoryId(row.category, 'expense', categories),
+      amount_aud: row.line_total || row.unit_price * (row.qty || 1),
+      date,
+      note: label,
+      merchant: label,
+      receipt_id: '',
+      created_at: `${date}T${time}:00`,
+      updated_at: nowIso(),
+    });
+  }
+
+  if (txs.length > 0) {
     await replaceSheetRows('transactions', txs, upsertTransaction);
   }
 
@@ -480,31 +541,7 @@ export async function pullFromSheets(): Promise<boolean> {
     await replaceSheetRows('savings_goals', goals, upsertSavingsGoal);
   }
 
-  // 6) System sheets
-  const recibos = parseSysTable(all._sys_receipts ?? [], (o) => ({
-    id: o.id,
-    user_id: o.user_id,
-    store: o.store,
-    total_aud: Number(o.total_aud) || 0,
-    photo_uri_or_drive_id: o.photo_uri_or_drive_id,
-    purchased_at: o.purchased_at,
-    raw_gemini_json: o.raw_gemini_json,
-    updated_at: o.updated_at || nowIso(),
-  })) as Receipt[];
-  if (recibos.length) await replaceSheetRows('receipts', recibos, upsertReceipt);
-
-  const items = parseSysTable(all._sys_receipt_items ?? [], (o) => ({
-    id: o.id,
-    receipt_id: o.receipt_id,
-    name: o.name,
-    qty: Number(o.qty) || 0,
-    unit_price_aud: Number(o.unit_price_aud) || 0,
-    line_total_aud: Number(o.line_total_aud) || 0,
-    category_guess: o.category_guess,
-    updated_at: o.updated_at || nowIso(),
-  })) as ReceiptItem[];
-  if (items.length) await replaceSheetRows('receipt_items', items, upsertReceiptItem);
-
+  // 6) Remaining system sheets (receipts already applied)
   const avisos = parseSysTable(all._sys_notifications ?? [], (o) => ({
     id: o.id,
     user_id: o.user_id,

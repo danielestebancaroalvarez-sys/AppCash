@@ -10,10 +10,10 @@ export function DailySpendWidget({ stats }: { stats: PeriodStats }) {
   const total = stats.dailyBars.reduce((a, b) => a + b.value, 0);
   return (
     <CollapsibleWidget
-      accent={Palette.cyan}
-      header={<WidgetTitle icon="calendar-outline" title="Daily Spend" />}
+      accent={Palette.amber}
+      header={<WidgetTitle icon="calendar-outline" title="Daily Spend" iconColor={Palette.amber} />}
       collapsedSummary={<Text style={styles.summary}>Week total {formatAud(total)}</Text>}>
-      <PlainDailyBars values={stats.dailyBars} />
+      <PlainDailyBars values={stats.dailyBars} color={Palette.amber} />
     </CollapsibleWidget>
   );
 }

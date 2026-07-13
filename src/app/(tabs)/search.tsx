@@ -28,6 +28,7 @@ import { getWeekRange, inRange } from '@/lib/dates';
 import { deleteTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
 import { exportTransactionsCsv } from '@/lib/excel/io';
+import { isPurchaseLevelTransaction } from '@/lib/purchases/filter';
 import type { Transaction, TransactionType } from '@/types/models';
 
 type TypeFilter = 'all' | 'expense' | 'income';
@@ -103,6 +104,7 @@ export default function SearchScreen() {
     }
 
     const filtered = transactions.filter((t) => {
+      if (!isPurchaseLevelTransaction(t)) return false;
       if (typeFilter === 'income' && !isIncome(t.type)) return false;
       if (typeFilter === 'expense' && !isExpense(t.type)) return false;
       if (!includeSavings && t.type === 'savings_contrib') return false;
@@ -120,7 +122,18 @@ export default function SearchScreen() {
         .includes(query);
     });
 
-    return filtered.sort((a, b) => {
+    // One row per receipt purchase
+    const seenReceipts = new Set<string>();
+    const deduped: Transaction[] = [];
+    for (const t of filtered) {
+      if (t.receipt_id) {
+        if (seenReceipts.has(t.receipt_id)) continue;
+        seenReceipts.add(t.receipt_id);
+      }
+      deduped.push(t);
+    }
+
+    return deduped.sort((a, b) => {
       const cmp = a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at);
       return sortNewest ? -cmp : cmp;
     });
@@ -359,8 +372,22 @@ export default function SearchScreen() {
           const cat = categories.find((c) => c.id === t.category_id);
           const income = isIncome(t.type);
           const title = t.merchant || t.note || cat?.name || t.type;
+          const openDetails = () => {
+            if (t.receipt_id) {
+              router.push({
+                pathname: '/receipts/[id]' as never,
+                params: { id: t.receipt_id },
+              });
+              return;
+            }
+            router.push({
+              pathname: '/transaction/edit' as never,
+              params: { id: t.id },
+            });
+          };
           return (
             <GlassPanel key={t.id} style={styles.card}>
+              <Pressable onPress={openDetails} style={styles.cardPress}>
               <View
                 style={[
                   styles.catIcon,
@@ -380,6 +407,7 @@ export default function SearchScreen() {
                     </Text>
                     <Text style={styles.cardMeta}>
                       {cat?.name ?? '—'} · {t.date}
+                      {t.receipt_id ? ' · receipt' : ''}
                     </Text>
                     <View style={styles.who}>
                       <UserAvatar user={user} name={user?.name ?? '?'} size={18} />
@@ -399,15 +427,14 @@ export default function SearchScreen() {
                     </Text>
                     <View style={styles.actions}>
                       <Pressable
-                        onPress={() =>
-                          router.push({
-                            pathname: '/transaction/edit' as never,
-                            params: { id: t.id },
-                          })
-                        }
+                        onPress={openDetails}
                         hitSlop={6}
                         style={styles.actionBtn}>
-                        <Ionicons name="pencil-outline" size={16} color={Palette.textMuted} />
+                        <Ionicons
+                          name={t.receipt_id ? 'receipt-outline' : 'pencil-outline'}
+                          size={16}
+                          color={Palette.textMuted}
+                        />
                       </Pressable>
                       <Pressable
                         onPress={() => onDelete(t)}
@@ -419,6 +446,7 @@ export default function SearchScreen() {
                   </View>
                 </View>
               </View>
+              </Pressable>
             </GlassPanel>
           );
         })
@@ -654,6 +682,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: Spacing.sm,
+    alignItems: 'flex-start',
+  },
+  cardPress: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 12,
     alignItems: 'flex-start',
   },
   catIcon: {
