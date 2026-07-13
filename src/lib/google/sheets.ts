@@ -448,7 +448,7 @@ export function parseCategoriaRows(values: string[][]): CategoryRow[] {
     id: o.id || '',
     name: o.name || o.nombre || '',
     type: o.type || o.tipo || 'expense',
-    icon: o.icon || o.icono || 'tag',
+    icon: o.icon || o.icono || 'cube',
     color: o.color || '#8B7CFF',
   }));
 }

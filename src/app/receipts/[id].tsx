@@ -105,6 +105,9 @@ export default function ReceiptDetailScreen() {
       ) : (
         items.map((item) => (
           <GlassPanel key={item.id} style={styles.item}>
+            <View style={styles.itemIcon}>
+              <Ionicons name="cube-outline" size={18} color={Palette.cyan} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.itemName}>{item.name}</Text>
               <Text style={styles.itemMeta}>
@@ -162,6 +165,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginBottom: Spacing.sm,
+  },
+  itemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: `${Palette.cyan}22`,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   itemName: { color: Palette.text, fontWeight: '700' },
   itemMeta: { color: Palette.textDim, fontSize: 12, marginTop: 2 },

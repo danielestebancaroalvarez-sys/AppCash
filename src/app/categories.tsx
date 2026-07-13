@@ -36,7 +36,7 @@ export default function CategoriesScreen() {
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState<CategoryType>('expense');
-  const [icon, setIcon] = useState('tag');
+  const [icon, setIcon] = useState('cube');
   const [color, setColor] = useState(CATEGORY_COLOR_OPTIONS[0]);
   const [busy, setBusy] = useState(false);
 
@@ -44,7 +44,7 @@ export default function CategoriesScreen() {
     setEditing(null);
     setName('');
     setType('expense');
-    setIcon('tag');
+    setIcon('cube');
     setColor(CATEGORY_COLOR_OPTIONS[categories.length % CATEGORY_COLOR_OPTIONS.length]);
     setFormOpen(true);
   };
@@ -53,7 +53,7 @@ export default function CategoriesScreen() {
     setEditing(cat);
     setName(cat.name);
     setType(cat.type);
-    setIcon(cat.icon || 'tag');
+    setIcon(cat.icon || 'cube');
     setColor(cat.color || CATEGORY_COLOR_OPTIONS[0]);
     setFormOpen(true);
   };

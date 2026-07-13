@@ -52,6 +52,7 @@ export const CATEGORY_ICON_OPTIONS: Array<{
   { id: 'pricetag', ion: 'pricetag-outline', label: 'Sale' },
   { id: 'basket', ion: 'basket-outline', label: 'Shop' },
   { id: 'storefront', ion: 'storefront-outline', label: 'Store' },
+  { id: 'cube', ion: 'cube-outline', label: 'Item' },
   { id: 'pizza', ion: 'pizza-outline', label: 'Takeaway' },
   { id: 'ice', ion: 'ice-cream-outline', label: 'Treats' },
   { id: 'baby', ion: 'happy-outline', label: 'Kids' },
@@ -63,7 +64,7 @@ export const CATEGORY_ICON_OPTIONS: Array<{
   { id: 'umbrella', ion: 'umbrella-outline', label: 'Insurance' },
   { id: 'document', ion: 'document-text-outline', label: 'Tax' },
   { id: 'calendar', ion: 'calendar-outline', label: 'Date' },
-  { id: 'tag', ion: 'ellipsis-horizontal-outline', label: 'Other' },
+  { id: 'tag', ion: 'cube-outline', label: 'Other' },
 ];
 
 const ION_BY_ID = Object.fromEntries(
@@ -71,7 +72,17 @@ const ION_BY_ID = Object.fromEntries(
 ) as Record<string, keyof typeof Ionicons.glyphMap>;
 
 export function categoryIonicon(icon: string): keyof typeof Ionicons.glyphMap {
-  return ION_BY_ID[icon] ?? 'pricetag-outline';
+  return ION_BY_ID[icon] ?? 'cube-outline';
+}
+
+/** Icon for a receipt line-item (product inside a purchase). */
+export function receiptItemIonicon(): keyof typeof Ionicons.glyphMap {
+  return 'cube-outline';
+}
+
+/** Icon for a merchant / store purchase. */
+export function merchantIonicon(): keyof typeof Ionicons.glyphMap {
+  return 'storefront-outline';
 }
 
 export const CATEGORY_COLOR_OPTIONS = [

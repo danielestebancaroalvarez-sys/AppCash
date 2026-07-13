@@ -198,22 +198,10 @@ export function usePeriodStats(): PeriodStats {
     }
 
     const merchantMap = new Map<string, number>();
-    // Prefer real stores from receipts
+    // Merchants = stores from scanned receipts only (never product line names)
     for (const r of receipts.filter((x) => inRange(x.purchased_at.slice(0, 10), start, end))) {
       const name = (r.store || 'Supermarket').trim() || 'Supermarket';
       merchantMap.set(name, (merchantMap.get(name) ?? 0) + r.total_aud);
-    }
-    // Plus purchase-level expenses (not product line leftovers)
-    for (const t of weekPurchases.filter(
-      (x) =>
-        !isIncomeTx(x) &&
-        x.type !== 'savings_contrib' &&
-        !x.receipt_id &&
-        isPurchaseLevelTransaction(x)
-    )) {
-      const name = (t.merchant || 'Other').trim() || 'Other';
-      if (isLikelyProductName(name)) continue;
-      merchantMap.set(name, (merchantMap.get(name) ?? 0) + t.amount_aud);
     }
     const topMerchants = [...merchantMap.entries()]
       .map(([name, value]) => ({ name, value }))

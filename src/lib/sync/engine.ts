@@ -327,7 +327,7 @@ async function resolveCategoryId(
     id,
     name: categoria.trim() || 'Extras',
     type: asCategoryType(hintType),
-    icon: 'tag',
+    icon: 'cube',
     color: CategoryPalette[cache.length % CategoryPalette.length],
     is_system: false,
     updated_at: nowIso(),
@@ -383,7 +383,7 @@ export async function pullFromSheets(): Promise<boolean> {
       id: r.id || createId(),
       name: r.name || 'Category',
       type: asCategoryType(r.type),
-      icon: r.icon || 'tag',
+      icon: r.icon || 'cube',
       color: r.color || CategoryPalette[i % CategoryPalette.length],
       is_system: false,
       updated_at: nowIso(),
@@ -477,18 +477,20 @@ export async function pullFromSheets(): Promise<boolean> {
   }
 
   for (const row of compras) {
+    // Line items live only in receipt_items — never as loose transactions
     if (!row.id || receiptItemIds.has(row.id)) continue;
     if (txs.some((t) => t.id === row.id || t.id === `tx_${row.id}`)) continue;
     const date = row.date || nowIso().slice(0, 10);
     const time = (row.time || '12:00').slice(0, 5);
-    const label = row.item || 'Purchase';
-    // Skip product line leftovers (receipt lines already handled via _sys_receipt_items)
+    const label = (row.item || '').trim() || 'Purchase';
+    // Product names stay inside the purchase; merchants are stores / real payees
     if (isLikelyProductName(label)) continue;
     txs.push({
       id: row.id,
       user_id: await resolveUserId(row.who, users),
-      type: labelToTxType(row.item),
-      category_id: await resolveCategoryId(row.category, 'expense', categories),
+      type: 'expense_sporadic',
+      category_id:
+        grocery?.id || (await resolveCategoryId(row.category || 'Groceries', 'expense', categories)),
       amount_aud: row.line_total || row.unit_price * (row.qty || 1),
       date,
       note: label,

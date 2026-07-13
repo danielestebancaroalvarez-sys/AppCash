@@ -19,7 +19,7 @@ import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
 import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAppDialog } from '@/components/ui/useAppDialog';
-import { categoryIonicon } from '@/constants/category-icons';
+import { categoryIonicon, merchantIonicon } from '@/constants/category-icons';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
@@ -50,6 +50,7 @@ function isExpense(type: TransactionType): boolean {
 export default function SearchScreen() {
   const router = useRouter();
   const transactions = useFinanceStore((s) => s.transactions);
+  const receipts = useFinanceStore((s) => s.receipts);
   const users = useFinanceStore((s) => s.users);
   const categories = useFinanceStore((s) => s.categories);
   const refresh = useFinanceStore((s) => s.refresh);
@@ -133,12 +134,45 @@ export default function SearchScreen() {
       deduped.push(t);
     }
 
+    // Ensure scanned receipts appear even if parent tx was wiped by a bad sync
+    if (typeFilter !== 'income') {
+      for (const r of receipts) {
+        const date = r.purchased_at.slice(0, 10);
+        if (seenReceipts.has(r.id)) continue;
+        if (start && end && !inRange(date, start, end)) continue;
+        if (userId !== 'all' && r.user_id !== userId) continue;
+        if (min != null && !Number.isNaN(min) && r.total_aud < min) continue;
+        if (max != null && !Number.isNaN(max) && r.total_aud > max) continue;
+        if (
+          query &&
+          ![r.store, String(r.total_aud)].join(' ').toLowerCase().includes(query)
+        ) {
+          continue;
+        }
+        seenReceipts.add(r.id);
+        deduped.push({
+          id: `tx_${r.id}`,
+          user_id: r.user_id,
+          type: 'expense_sporadic',
+          category_id: categories.find((c) => c.name.toLowerCase() === 'groceries')?.id ?? '',
+          amount_aud: r.total_aud,
+          date,
+          note: `Receipt ${r.store}`,
+          merchant: r.store || 'Receipt',
+          receipt_id: r.id,
+          created_at: r.purchased_at || `${date}T12:00:00`,
+          updated_at: r.updated_at,
+        });
+      }
+    }
+
     return deduped.sort((a, b) => {
       const cmp = a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at);
       return sortNewest ? -cmp : cmp;
     });
   }, [
     transactions,
+    receipts,
     q,
     typeFilter,
     categoryId,
@@ -391,12 +425,20 @@ export default function SearchScreen() {
               <View
                 style={[
                   styles.catIcon,
-                  { backgroundColor: `${cat?.color ?? Palette.violet}28` },
+                  {
+                    backgroundColor: t.receipt_id
+                      ? `${Palette.cyan}28`
+                      : `${cat?.color ?? Palette.violet}28`,
+                  },
                 ]}>
                 <Ionicons
-                  name={categoryIonicon(cat?.icon ?? 'tag')}
+                  name={
+                    t.receipt_id
+                      ? merchantIonicon()
+                      : categoryIonicon(cat?.icon ?? 'cube')
+                  }
                   size={18}
-                  color={cat?.color ?? Palette.violet}
+                  color={t.receipt_id ? Palette.cyan : cat?.color ?? Palette.violet}
                 />
               </View>
               <View style={styles.cardBody}>
