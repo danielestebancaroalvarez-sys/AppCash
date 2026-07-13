@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -27,11 +27,21 @@ import { deleteCategory, upsertCategory } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
 import type { Category, CategoryType } from '@/types/models';
 
+type TypeFilter = 'all' | CategoryType;
+
+const TYPE_FILTERS: Array<{ id: TypeFilter; label: string; color: string }> = [
+  { id: 'all', label: 'All', color: Palette.cyan },
+  { id: 'expense', label: 'Expense', color: Palette.coral },
+  { id: 'income', label: 'Income', color: Palette.teal },
+  { id: 'savings', label: 'Savings', color: Palette.violet },
+];
+
 export default function CategoriesScreen() {
   const categories = useFinanceStore((s) => s.categories);
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, confirm, Dialog } = useAppDialog();
 
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [editing, setEditing] = useState<Category | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState('');
@@ -40,10 +50,26 @@ export default function CategoriesScreen() {
   const [color, setColor] = useState(CATEGORY_COLOR_OPTIONS[0]);
   const [busy, setBusy] = useState(false);
 
+  const filtered = useMemo(() => {
+    const list =
+      typeFilter === 'all' ? categories : categories.filter((c) => c.type === typeFilter);
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+  }, [categories, typeFilter]);
+
+  const counts = useMemo(() => {
+    const base = { all: categories.length, expense: 0, income: 0, savings: 0 };
+    for (const c of categories) {
+      if (c.type === 'expense' || c.type === 'income' || c.type === 'savings') {
+        base[c.type] += 1;
+      }
+    }
+    return base;
+  }, [categories]);
+
   const openCreate = () => {
     setEditing(null);
     setName('');
-    setType('expense');
+    setType(typeFilter === 'all' ? 'expense' : typeFilter);
     setIcon('cube');
     setColor(CATEGORY_COLOR_OPTIONS[categories.length % CATEGORY_COLOR_OPTIONS.length]);
     setFormOpen(true);
@@ -102,19 +128,50 @@ export default function CategoriesScreen() {
     <Screen tabAware={false}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.headerRow}>
-          <SectionTitle title={`${categories.length} categories`} subtitle="Tap to edit · long-press icons" />
+          <SectionTitle
+            title={`${filtered.length} categories`}
+            subtitle="Filter by type · tap to edit"
+          />
           <PrimaryButton label="New" onPress={openCreate} />
         </View>
 
-        {categories.length === 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}>
+          {TYPE_FILTERS.map((f) => {
+            const on = typeFilter === f.id;
+            const count = counts[f.id];
+            return (
+              <Pressable
+                key={f.id}
+                onPress={() => setTypeFilter(f.id)}
+                style={[
+                  styles.filterChip,
+                  on && { borderColor: f.color, backgroundColor: `${f.color}22` },
+                ]}>
+                <Text style={[styles.filterText, on && { color: Palette.text }]}>
+                  {f.label} ({count})
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {filtered.length === 0 ? (
           <GlassPanel>
-            <Text style={styles.meta}>No categories yet. Create your first one.</Text>
+            <Text style={styles.meta}>
+              {categories.length === 0
+                ? 'No categories yet. Create your first one.'
+                : `No ${typeFilter} categories.`}
+            </Text>
           </GlassPanel>
         ) : (
-          categories.map((c) => (
+          filtered.map((c) => (
             <GlassPanel key={c.id} style={styles.item}>
               <Pressable onPress={() => openEdit(c)} style={styles.itemMain}>
-                <View style={[styles.iconWrap, { backgroundColor: `${c.color}33`, borderColor: c.color }]}>
+                <View
+                  style={[styles.iconWrap, { backgroundColor: `${c.color}33`, borderColor: c.color }]}>
                   <Ionicons name={categoryIonicon(c.icon)} size={20} color={c.color} />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -165,9 +222,9 @@ export default function CategoriesScreen() {
         </View>
         <Text style={styles.label}>Color</Text>
         <View style={styles.row}>
-          {CATEGORY_COLOR_OPTIONS.map((c) => (
+          {CATEGORY_COLOR_OPTIONS.map((c, i) => (
             <Pressable
-              key={c}
+              key={`${c}-${i}`}
               onPress={() => setColor(c)}
               style={[
                 styles.colorDot,
@@ -209,6 +266,16 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
   },
+  filterRow: { flexDirection: 'row', gap: 8, marginBottom: Spacing.md, paddingVertical: 2 },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    borderRadius: Radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: Palette.panel,
+  },
+  filterText: { color: Palette.textMuted, fontSize: 12, fontWeight: '700' },
   label: { color: Palette.textMuted, fontSize: 12, marginTop: Spacing.sm },
   input: {
     borderWidth: 1,
@@ -241,7 +308,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   colorDotOn: { borderColor: Palette.white },
-  iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   iconRow: { flexDirection: 'row', gap: 8, marginTop: 8, paddingVertical: 2 },
   iconPick: {
     width: 44,

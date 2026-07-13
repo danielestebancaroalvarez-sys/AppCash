@@ -2,7 +2,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
-import { GlassPanel } from '@/components/ui/Primitives';
+import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -23,22 +23,30 @@ export default function ReceiptsListScreen() {
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing} tabAware={false}>
-      <Text style={styles.lead}>
-        {receipts.length} receipt{receipts.length === 1 ? '' : 's'} stored on this phone
-      </Text>
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.lead}>
+            {receipts.length} receipt{receipts.length === 1 ? '' : 's'} archived
+          </Text>
+          <Text style={styles.sub}>
+            Save store, date, total and photo — no AI required.
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => router.push('/receipts/new' as never)}
+          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}>
+          <Ionicons name="add" size={22} color={Palette.void} />
+        </Pressable>
+      </View>
 
       {receipts.length === 0 ? (
         <GlassPanel>
           <Text style={styles.emptyTitle}>No receipts yet</Text>
           <Text style={styles.empty}>
-            Scan a receipt from the Add tab — photos and line items show up here.
+            Add a receipt with basic details (store, date, total). Use Add → Scan only when you want
+            AI line items.
           </Text>
-          <Pressable
-            onPress={() => router.push('/(tabs)/add' as never)}
-            style={styles.cta}>
-            <Ionicons name="scan-outline" size={18} color={Palette.void} />
-            <Text style={styles.ctaText}>Scan a receipt</Text>
-          </Pressable>
+          <PrimaryButton label="Add receipt" onPress={() => router.push('/receipts/new' as never)} />
         </GlassPanel>
       ) : (
         receipts.map((r) => {
@@ -65,7 +73,7 @@ export default function ReceiptsListScreen() {
                   </Text>
                   <Text style={styles.meta}>
                     {formatDisplayDate(r.purchased_at.slice(0, 10) || r.purchased_at)}
-                    {itemCount ? ` · ${itemCount} items` : ''}
+                    {itemCount ? ` · ${itemCount} items` : ' · manual'}
                   </Text>
                   <View style={styles.who}>
                     <UserAvatar user={user} size={18} />
@@ -88,7 +96,22 @@ export default function ReceiptsListScreen() {
 }
 
 const styles = StyleSheet.create({
-  lead: { color: Palette.textMuted, fontSize: 13, marginBottom: Spacing.md },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: Spacing.md,
+  },
+  lead: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '800', fontSize: 16 },
+  sub: { color: Palette.textMuted, fontSize: 12, marginTop: 4, lineHeight: 16 },
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Palette.cyan,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   emptyTitle: {
     color: Palette.text,
     fontFamily: Fonts.display,
@@ -97,17 +120,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   empty: { color: Palette.textDim, fontSize: 13, lineHeight: 18, marginBottom: Spacing.md },
-  cta: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Palette.cyan,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: Radii.pill,
-  },
-  ctaText: { color: Palette.void, fontWeight: '800', fontSize: 13 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',

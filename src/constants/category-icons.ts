@@ -86,11 +86,15 @@ export function merchantIonicon(): keyof typeof Ionicons.glyphMap {
 }
 
 export const CATEGORY_COLOR_OPTIONS = [
-  ...CategoryPalette,
-  '#5B8CFF',
-  '#FF7EB6',
-  '#6BFFD8',
-  '#C4B5FD',
-  '#FCA5A5',
-  '#FDE68A',
+  ...new Set([
+    ...CategoryPalette,
+    '#FF7EB6',
+    '#C4B5FD',
+    '#FCA5A5',
+    '#FDE68A',
+    '#34D399',
+    '#60A5FA',
+    '#F472B6',
+    '#A78BFA',
+  ]),
 ] as string[];
