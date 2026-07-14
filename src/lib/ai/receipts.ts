@@ -181,6 +181,7 @@ export async function setGeminiApiKey(key: string): Promise<void> {
 }
 
 export async function getNvidiaApiKey(): Promise<string> {
+  // One key only. EXPO_PUBLIC_NVAPI_API_KEY kept as legacy alias (same NVIDIA key).
   return sanitizeApiKey(
     (await SecureStore.getItemAsync(KEYS.nvidia)) ||
       process.env.EXPO_PUBLIC_NVIDIA_API_KEY ||
@@ -438,6 +439,25 @@ function report(
 function shortModel(model: string): string {
   const parts = model.split('/');
   return parts[parts.length - 1] || model;
+}
+
+/** Turn vendor error bodies into short, actionable messages. */
+function formatProviderHttpError(provider: string, status: number, body: string): string {
+  const raw = body.trim();
+  let detail = raw.slice(0, 280);
+  try {
+    const j = JSON.parse(raw) as { detail?: string; title?: string; message?: string; error?: { message?: string } };
+    detail = j.detail || j.message || j.error?.message || j.title || detail;
+  } catch {
+    /* keep raw */
+  }
+  if (status === 401 || status === 403) {
+    return `${provider} API key rejected (${status}). Generate a new key at build.nvidia.com/settings/api-keys and paste it in Settings → AI.`;
+  }
+  if (status === 429) {
+    return `${provider} rate limit / quota (${status}). Wait a bit or try the next provider.`;
+  }
+  return `${provider} HTTP ${status}: ${detail}`;
 }
 
 async function ocrSpaceExtractText(prepared: PreparedReceiptImage): Promise<string> {
@@ -808,7 +828,12 @@ async function parseWithNvidia(
     });
 
     if (!res.ok) {
-      lastError = await res.text();
+      const body = await res.text();
+      lastError = formatProviderHttpError('NVIDIA', res.status, body);
+      // Auth failures won't fix by trying another vision model — stop early.
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(lastError);
+      }
       report(onProgress, {
         stage: 'fallback',
         provider: 'nvidia',

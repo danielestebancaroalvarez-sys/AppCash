@@ -31,7 +31,7 @@ const META: Record<
   },
   nvidia: {
     label: 'NVIDIA',
-    hint: 'build.nvidia.com',
+    hint: 'One key from build.nvidia.com (nvapi-…)',
     icon: 'hardware-chip-outline',
     color: Palette.teal,
     placeholder: 'nvapi-…',
