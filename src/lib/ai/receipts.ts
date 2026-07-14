@@ -164,7 +164,7 @@ export async function getOcrSpaceApiKey(): Promise<string> {
   return (
     (await SecureStore.getItemAsync(KEYS.ocrSpace)) ||
     process.env.EXPO_PUBLIC_OCRSPACE_API_KEY ||
-    'helloworld'
+    ''
   );
 }
 

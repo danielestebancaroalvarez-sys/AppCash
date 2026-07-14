@@ -269,7 +269,9 @@ export default function AddScreen() {
           />
           <Text style={styles.signedIn}>Signed in as {session.name}</Text>
         </View>
-      ) : null}
+      ) : (
+        <Text style={styles.signedIn}>Offline mode · data stays on this phone</Text>
+      )}
 
       <View style={styles.modes}>
         {MODES.map((m) => {

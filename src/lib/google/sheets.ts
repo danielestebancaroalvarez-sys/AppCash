@@ -12,8 +12,9 @@ import type {
 } from '@/types/models';
 
 /**
- * Human sheets (edit these freely in Google Sheets).
- * System sheets (prefixed _sys_) store app internals — leave alone unless debugging.
+ * Human sheets historically included Users/Categories/Fixed/Savings.
+ * Sync now only writes Purchases — a spouse-friendly purchase list.
+ * Other tab names remain for legacy read compatibility only.
  */
 export const HUMAN_SHEETS = [
   'Users',
@@ -32,6 +33,10 @@ export const SYSTEM_SHEETS = [
 ] as const;
 
 export const SHEET_NAMES = [...HUMAN_SHEETS, ...SYSTEM_SHEETS] as const;
+
+/** Only this tab is created/updated by sync (app is source of truth for the rest). */
+export const SYNC_SHEETS = ['Purchases'] as const;
+export type SyncSheetName = (typeof SYNC_SHEETS)[number];
 
 /** Old Spanish tab titles — still readable on pull. */
 export const LEGACY_SHEET_ALIASES: Record<SheetName, string[]> = {
@@ -68,15 +73,12 @@ export const SHEET_HEADERS: Record<SheetName, string[]> = {
     'next_due',
   ],
   Purchases: [
+    'Fecha',
+    'Quién',
+    'Descripción',
+    'Categoría',
+    'Monto',
     'id',
-    'date',
-    'time',
-    'who',
-    'category',
-    'item',
-    'qty',
-    'unit_price',
-    'line_total',
   ],
   Savings: [
     'id',
@@ -148,6 +150,16 @@ export type PurchaseRow = {
   qty: number;
   unit_price: number;
   line_total: number;
+};
+
+/** Spouse-friendly row for Purchases tab (one purchase = one row). */
+export type PurchaseSheetRow = {
+  Fecha: string;
+  Quién: string;
+  Descripción: string;
+  Categoría: string;
+  Monto: number;
+  id: string;
 };
 
 export type SavingsRow = {
@@ -236,23 +248,24 @@ async function sheetsFetch(accessToken: string, path: string, init?: RequestInit
   return res.json();
 }
 
-export async function createAppSpreadsheet(accessToken: string, title = 'AppCash'): Promise<string> {
+export async function createAppSpreadsheet(accessToken: string, title = 'AppCash Compras'): Promise<string> {
   const data = await sheetsFetch(accessToken, '', {
     method: 'POST',
     body: JSON.stringify({
       properties: { title },
-      sheets: SHEET_NAMES.map((titleName) => ({ properties: { title: titleName } })),
+      sheets: [{ properties: { title: 'Purchases' } }],
     }),
   });
   const spreadsheetId = data.spreadsheetId as string;
-  await ensureHeaders(accessToken, spreadsheetId);
+  await ensurePurchaseSheet(accessToken, spreadsheetId);
   return spreadsheetId;
 }
 
-export async function ensureWorkbookStructure(
+/** Ensure Purchases (or legacy Compras) exists with spouse-friendly headers. Does not create system tabs. */
+export async function resolvePurchaseTabName(
   accessToken: string,
   spreadsheetId: string
-): Promise<void> {
+): Promise<'Purchases' | 'Compras'> {
   const meta = await sheetsFetch(
     accessToken,
     `/${spreadsheetId}?fields=sheets.properties.title`
@@ -262,32 +275,46 @@ export async function ensureWorkbookStructure(
       (s) => s.properties?.title ?? ''
     )
   );
-  const requests = SHEET_NAMES.filter((name) => !titles.has(name)).map((title) => ({
-    addSheet: { properties: { title } },
-  }));
-  if (requests.length) {
-    await sheetsFetch(accessToken, `/${spreadsheetId}:batchUpdate`, {
-      method: 'POST',
-      body: JSON.stringify({ requests }),
-    });
-  }
-  await ensureHeaders(accessToken, spreadsheetId);
+  if (titles.has('Purchases')) return 'Purchases';
+  if (titles.has('Compras')) return 'Compras';
+  await sheetsFetch(accessToken, `/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({
+      requests: [{ addSheet: { properties: { title: 'Purchases' } } }],
+    }),
+  });
+  return 'Purchases';
 }
 
-export async function ensureHeaders(accessToken: string, spreadsheetId: string): Promise<void> {
-  const existing = await batchReadSheets(accessToken, spreadsheetId, [...SHEET_NAMES], false);
-  const data = [];
-  for (const name of SHEET_NAMES) {
-    const values = existing[name] ?? [];
-    if (!values.length) {
-      data.push({ range: `${name}!A1`, values: [SHEET_HEADERS[name]] });
-    }
+export async function ensurePurchaseSheet(
+  accessToken: string,
+  spreadsheetId: string
+): Promise<void> {
+  const tab = await resolvePurchaseTabName(accessToken, spreadsheetId);
+  const existing = await batchReadSheets(accessToken, spreadsheetId, ['Purchases'], true);
+  const values = existing.Purchases ?? [];
+  if (!values.length) {
+    await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        valueInputOption: 'RAW',
+        data: [{ range: `${tab}!A1`, values: [SHEET_HEADERS.Purchases] }],
+      }),
+    });
   }
-  if (!data.length) return;
-  await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchUpdate`, {
-    method: 'POST',
-    body: JSON.stringify({ valueInputOption: 'RAW', data }),
-  });
+}
+
+/** @deprecated Prefer ensurePurchaseSheet — kept so call sites compile during migration. */
+export async function ensureWorkbookStructure(
+  accessToken: string,
+  spreadsheetId: string
+): Promise<void> {
+  await ensurePurchaseSheet(accessToken, spreadsheetId);
+}
+
+/** @deprecated Prefer ensurePurchaseSheet */
+export async function ensureHeaders(accessToken: string, spreadsheetId: string): Promise<void> {
+  await ensurePurchaseSheet(accessToken, spreadsheetId);
 }
 
 /**
@@ -348,21 +375,31 @@ export async function batchWriteAllSheets(
 ): Promise<void> {
   if (!sheets.length) return;
 
+  const ranges: string[] = [];
+  const data: Array<{ range: string; values: string[][] }> = [];
+
+  for (const { sheet, rows } of sheets) {
+    const tab =
+      sheet === 'Purchases'
+        ? await resolvePurchaseTabName(accessToken, spreadsheetId)
+        : sheet;
+    ranges.push(`${tab}!A:Z`);
+    data.push({
+      range: `${tab}!A1`,
+      values: [SHEET_HEADERS[sheet], ...rows],
+    });
+  }
+
   await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchClear`, {
     method: 'POST',
-    body: JSON.stringify({
-      ranges: sheets.map((s) => `${s.sheet}!A:Z`),
-    }),
+    body: JSON.stringify({ ranges }),
   });
 
   await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({
       valueInputOption: 'RAW',
-      data: sheets.map(({ sheet, rows }) => ({
-        range: `${sheet}!A1`,
-        values: [SHEET_HEADERS[sheet], ...rows],
-      })),
+      data,
     }),
   });
 }
@@ -470,17 +507,36 @@ export function parseGastoFijoRows(values: string[][]): FixedRow[] {
 }
 
 export function parseCompraRows(values: string[][]): PurchaseRow[] {
-  return dataRows(values).map((o) => ({
-    id: o.id || '',
-    date: o.date || o.fecha || '',
-    time: o.time || o.hora || '00:00',
-    who: o.who || o.quien || '',
-    category: o.category || o.categoria || '',
-    item: o.item || o.tipo || o.name || '',
-    qty: asNum(o.qty) || asNum(o.unidades) || 1,
-    unit_price: asNum(o.unit_price) || asNum(o.precio_unidad),
-    line_total: asNum(o.line_total) || asNum(o.precio_total) || asNum(o.unit_price) || asNum(o.precio_unidad),
-  }));
+  return dataRows(values).map((o) => {
+    const item =
+      o['descripción'] ||
+      o.descripcion ||
+      o.description ||
+      o.item ||
+      o.tipo ||
+      o.name ||
+      '';
+    const total =
+      asNum(o.monto) ||
+      asNum(o.line_total) ||
+      asNum(o.precio_total) ||
+      asNum(o.amount) ||
+      asNum(o.unit_price) ||
+      asNum(o.precio_unidad);
+    const qty = asNum(o.qty) || asNum(o.unidades) || 1;
+    const unit = asNum(o.unit_price) || asNum(o.precio_unidad) || (qty ? total / qty : total);
+    return {
+      id: o.id || '',
+      date: o.date || o.fecha || '',
+      time: o.time || o.hora || '12:00',
+      who: o.who || o.quien || o['quién'] || '',
+      category: o.category || o.categoria || o['categoría'] || '',
+      item,
+      qty,
+      unit_price: unit,
+      line_total: total || unit * qty,
+    };
+  });
 }
 
 export function parseAhorroRows(values: string[][]): SavingsRow[] {

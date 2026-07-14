@@ -41,18 +41,11 @@ export default function MoreScreen() {
       <Text style={styles.kicker}>AppCash</Text>
       <Text style={styles.title}>More</Text>
       <Text style={styles.sub}>
-        Shortcuts for money setup. Sheet sync and AI keys live under Account (profile photo).
+        Money tools stay on this phone. Optional purchase sheet for your partner is under Account.
       </Text>
 
-      <SectionTitle title="Money setup" />
+      <SectionTitle title="Money" subtitle="Day-to-day tracking" />
       <GlassPanel style={styles.menu}>
-        <MenuRow
-          icon="receipt-outline"
-          iconColor="#5B8CFF"
-          title="Receipts"
-          subtitle="Photos, dates, and line items"
-          onPress={() => router.push('/receipts' as never)}
-        />
         <MenuRow
           icon="calendar-outline"
           iconColor={Palette.coral}
@@ -68,18 +61,54 @@ export default function MoreScreen() {
           onPress={() => router.push('/categories' as never)}
         />
         <MenuRow
-          icon="notifications-outline"
-          iconColor={Palette.amber}
-          title="Payment reminders"
-          subtitle="Schedule alerts for manual bills"
-          onPress={onNotify}
+          icon="folder-open-outline"
+          iconColor="#5B8CFF"
+          title="Receipt archive"
+          subtitle="Browse saved receipts — scan with AI from Add"
+          onPress={() => router.push('/receipts' as never)}
         />
         <MenuRow
           icon="trending-up-outline"
           iconColor={Palette.teal}
-          title="Market insights"
-          subtitle="Predictions from grocery receipts"
+          title="Market prediction"
+          subtitle="What to buy next from grocery history"
           onPress={onInsights}
+        />
+        <MenuRow
+          icon="notifications-outline"
+          iconColor={Palette.amber}
+          title="Payment reminders"
+          subtitle="Alerts for manual bills"
+          onPress={onNotify}
+        />
+      </GlassPanel>
+
+      <SectionTitle title="Setup" subtitle="Account and optional purchase sheet" />
+      <GlassPanel style={styles.menu}>
+        <MenuRow
+          icon="person-circle-outline"
+          iconColor={Palette.cyan}
+          title="Account"
+          subtitle={
+            session?.email
+              ? `${session.email} · household & Google`
+              : 'Profiles · link Google for purchase sheet'
+          }
+          onPress={() => router.push('/profile' as never)}
+        />
+        <MenuRow
+          icon="grid-outline"
+          iconColor={Palette.mint}
+          title="Purchase sheet"
+          subtitle="Optional Compras list your partner can edit"
+          onPress={() => router.push('/account/sheets' as never)}
+        />
+        <MenuRow
+          icon="sparkles-outline"
+          iconColor={Palette.amber}
+          title="Receipt AI"
+          subtitle="Gemini / NVIDIA / OpenRouter keys"
+          onPress={() => router.push('/account/ai' as never)}
         />
       </GlassPanel>
 
@@ -113,21 +142,6 @@ export default function MoreScreen() {
           );
         })}
       </CollapsibleWidget>
-
-      <SectionTitle title="Account" />
-      <GlassPanel style={styles.menu}>
-        <MenuRow
-          icon="person-circle-outline"
-          iconColor={Palette.cyan}
-          title="Open account"
-          subtitle={
-            session?.email
-              ? `${session.email} · Sheets & AI tokens`
-              : 'Profile, Google Sheets, receipt AI'
-          }
-          onPress={() => router.push('/profile' as never)}
-        />
-      </GlassPanel>
 
       <View style={{ height: Spacing.lg }} />
       {Dialog}

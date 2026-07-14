@@ -176,13 +176,20 @@ export default function ProfileScreen() {
         </View>
       </GlassPanel>
 
-      <SectionTitle title="Connections" subtitle="Google Sheet and receipt AI live here" />
+      <SectionTitle
+        title="Connections"
+        subtitle="Purchase sheet is optional — categories & bills stay on this phone"
+      />
       <GlassPanel style={styles.menu}>
         <MenuRow
           icon="grid-outline"
           iconColor={Palette.teal}
-          title="Google Sheets"
-          subtitle={session?.spreadsheetId ? 'Sync, open, or unlink' : 'Link or create a spreadsheet'}
+          title="Purchase sheet"
+          subtitle={
+            session?.spreadsheetId
+              ? 'Sync Compras list with your partner'
+              : 'Optional Google Sheet for purchases only'
+          }
           onPress={() => router.push('/account/sheets' as never)}
         />
         <MenuRow
@@ -269,9 +276,9 @@ export default function ProfileScreen() {
       <AppModal
         visible={signOutOpen}
         title="Sign out?"
-        message="You’ll need Google again to sync. Data cached on this phone stays until you clear app storage."
-        confirmLabel={busy ? 'Signing out…' : 'Sign out'}
-        cancelLabel="Stay signed in"
+        message="Disconnects Google. Your finances stay on this phone. You can keep using AppCash offline and link a purchase sheet again later."
+        confirmLabel={busy ? 'Signing out…' : 'Disconnect Google'}
+        cancelLabel="Stay connected"
         tone="danger"
         confirmDisabled={busy}
         onCancel={() => setSignOutOpen(false)}

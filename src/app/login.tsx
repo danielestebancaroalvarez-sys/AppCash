@@ -6,7 +6,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '@/components/ui/Screen';
 import { AppCashLogo } from '@/components/brand/AppCashLogo';
 import { GoogleGlyph } from '@/components/brand/GoogleGlyph';
@@ -17,21 +16,32 @@ import {
   saveGoogleSession,
   signInWithGoogleNative,
 } from '@/lib/google/auth';
-import { ensureSpreadsheet } from '@/lib/sync/engine';
 import { seedIfNeeded } from '@/lib/db/seed';
 import { useFinanceStore } from '@/stores/finance-store';
 
 export default function LoginScreen() {
   const setSession = useFinanceStore((s) => s.setSession);
+  const enterLocalMode = useFinanceStore((s) => s.enterLocalMode);
   const refresh = useFinanceStore((s) => s.refresh);
   const [busy, setBusy] = useState(false);
   const { alert, Dialog } = useAppDialog();
+
+  const onLocal = async () => {
+    setBusy(true);
+    try {
+      await enterLocalMode('Me');
+    } catch (e) {
+      alert('Could not start', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const onGoogle = async () => {
     if (!isGoogleConfigured()) {
       alert(
         'Setup needed',
-        'Google Sign-In is not configured yet. Check your .env Client IDs and rebuild the Android app.'
+        'Google Sign-In is not configured yet. You can still Continue locally — link Google later from Account to sync the purchase sheet.'
       );
       return;
     }
@@ -48,17 +58,8 @@ export default function LoginScreen() {
 
       const session = result.session;
       await seedIfNeeded(session.name, session.email, session.photoUrl ?? '');
-
-      try {
-        const sheetId = await ensureSpreadsheet();
-        if (sheetId) {
-          session.spreadsheetId = sheetId;
-          await saveGoogleSession(session);
-        }
-      } catch {
-        // Sheet can be linked later in Settings
-      }
-
+      // Sheet is optional — link later from Account → Purchase sheet
+      await saveGoogleSession(session);
       setSession(session);
       await refresh();
     } catch (e) {
@@ -71,21 +72,33 @@ export default function LoginScreen() {
   return (
     <Screen safeTop>
       <View style={styles.hero}>
-        <LinearGradient
-          colors={['rgba(61,231,255,0.22)', 'rgba(46,230,166,0.06)', 'transparent']}
-          style={styles.heroGlow}
-        />
         <AppCashLogo size={112} showWordmark />
-        <Text style={styles.tagline}>Household finances in AUD, synced to your Google Sheet.</Text>
+        <Text style={styles.tagline}>
+          Household finances on this phone. Optional Google Sheet shares a simple purchase list
+          with your partner.
+        </Text>
       </View>
 
       <View style={styles.card}>
-        <LinearGradient
-          colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.02)']}
-          style={StyleSheet.absoluteFill}
-        />
-        <Text style={styles.cardTitle}>Welcome back</Text>
-        <Text style={styles.cardSub}>Sign in to continue managing your household cashflow.</Text>
+        <Text style={styles.cardTitle}>Get started</Text>
+        <Text style={styles.cardSub}>
+          Use the app fully offline. Link Google only when you want a Compras sheet your partner
+          can open and fill.
+        </Text>
+
+        <Pressable
+          onPress={onLocal}
+          disabled={busy}
+          style={({ pressed }) => [
+            styles.localBtn,
+            (pressed || busy) && { opacity: 0.88 },
+          ]}>
+          {busy ? (
+            <ActivityIndicator color={Palette.void} />
+          ) : (
+            <Text style={styles.localLabel}>Continue locally</Text>
+          )}
+        </Pressable>
 
         <Pressable
           onPress={onGoogle}
@@ -94,20 +107,14 @@ export default function LoginScreen() {
             styles.googleBtn,
             (pressed || busy) && { opacity: 0.88 },
           ]}>
-          {busy ? (
-            <ActivityIndicator color={Palette.void} />
-          ) : (
-            <>
-              <View style={styles.googleIconWrap}>
-                <GoogleGlyph size={18} />
-              </View>
-              <Text style={styles.googleLabel}>Continue with Google</Text>
-            </>
-          )}
+          <View style={styles.googleIconWrap}>
+            <GoogleGlyph size={18} />
+          </View>
+          <Text style={styles.googleLabel}>Continue with Google</Text>
         </Pressable>
       </View>
 
-      <Text style={styles.footer}>Australian dollars · Week starts Monday</Text>
+      <Text style={styles.footer}>Australian dollars · Week starts Monday · Works offline</Text>
       {Dialog}
     </Screen>
   );
@@ -119,25 +126,19 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xxl,
     marginBottom: Spacing.xl,
   },
-  heroGlow: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    top: -20,
-  },
   tagline: {
     color: Palette.textMuted,
     textAlign: 'center',
     marginTop: Spacing.md,
-    maxWidth: 280,
+    maxWidth: 300,
     lineHeight: 22,
     fontSize: 15,
+    fontFamily: Fonts.body,
   },
   card: {
     backgroundColor: Palette.panel,
-    borderRadius: Radii.xl,
-    borderWidth: 1,
+    borderRadius: Radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Palette.stroke,
     padding: Spacing.lg,
     gap: Spacing.md,
@@ -147,16 +148,28 @@ const styles = StyleSheet.create({
     color: Palette.text,
     fontFamily: Fonts.display,
     fontSize: 24,
-    fontWeight: '700',
   },
   cardSub: {
     color: Palette.textMuted,
+    fontFamily: Fonts.body,
     lineHeight: 21,
     marginBottom: Spacing.sm,
   },
+  localBtn: {
+    height: 54,
+    borderRadius: Radii.md,
+    backgroundColor: Palette.cyan,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  localLabel: {
+    color: Palette.void,
+    fontFamily: Fonts.display,
+    fontSize: 16,
+  },
   googleBtn: {
     height: 54,
-    borderRadius: Radii.pill,
+    borderRadius: Radii.md,
     backgroundColor: Palette.white,
     flexDirection: 'row',
     alignItems: 'center',
@@ -173,7 +186,6 @@ const styles = StyleSheet.create({
   googleLabel: {
     color: '#1F1F1F',
     fontFamily: Fonts.display,
-    fontWeight: '700',
     fontSize: 16,
   },
   footer: {
@@ -181,5 +193,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.xl,
     fontSize: 12,
+    fontFamily: Fonts.body,
   },
 });

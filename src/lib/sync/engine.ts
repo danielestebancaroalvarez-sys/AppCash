@@ -2,24 +2,12 @@ import {
   asCategoryType,
   batchReadSheets,
   batchWriteAllSheets,
-  categoryTypeLabel,
   createAppSpreadsheet,
-  directionLabel,
-  ensureWorkbookStructure,
-  labelToTxType,
-  parseAhorroRows,
-  parseCategoriaRows,
+  ensurePurchaseSheet,
   parseCompraRows,
-  parseDirection,
-  parseGastoFijoRows,
-  parsePeriod,
   parseSpreadsheetId,
-  parseUsuarioRows,
-  periodLabel,
   serializeRows,
   spreadsheetEditUrl,
-  transactionTypeLabel,
-  type SheetName,
 } from '@/lib/google/sheets';
 import {
   isAuthExpiredError,
@@ -32,45 +20,23 @@ import {
   enqueueOutbox,
   getSetting,
   listCategories,
-  listFixedItems,
-  listNotifications,
   listOutbox,
-  listProductStats,
-  listReceiptItems,
-  listReceipts,
-  listSavingsGoals,
   listTransactions,
   listUsers,
   removeOutbox,
   bumpOutboxAttempt,
-  replaceSheetRows,
+  bumpAllOutboxAttempts,
+  resetOutboxAttempts,
   setSetting,
   upsertCategory,
-  upsertFixedItem,
-  upsertNotification,
-  upsertProductStat,
-  upsertReceipt,
-  upsertReceiptItem,
-  upsertSavingsGoal,
   upsertTransaction,
   upsertUser,
 } from '@/lib/db';
 import { createId } from '@/lib/id';
 import { nowIso } from '@/lib/dates';
-import { isLikelyProductName } from '@/lib/purchases/filter';
 import { CategoryPalette } from '@/constants/theme';
 import { ensureHouseholdDefaults } from '@/lib/db/seed';
-import type {
-  AppNotification,
-  AppUser,
-  Category,
-  FixedItem,
-  ProductStat,
-  Receipt,
-  ReceiptItem,
-  SavingsGoal,
-  Transaction,
-} from '@/types/models';
+import type { AppUser, Category, Transaction } from '@/types/models';
 
 const MIN_SYNC_GAP_MS = 70_000;
 let lastSyncAtMs = 0;
@@ -78,7 +44,6 @@ let syncInFlight: Promise<{ ok: boolean; mode: 'local' | 'sheets'; message: stri
   null;
 
 async function getAccess(): Promise<{ token: string; spreadsheetId: string } | null> {
-  // Always try to refresh — stored access tokens expire ~1h after login.
   const session = (await refreshGoogleAccessToken()) ?? (await loadGoogleSession());
   if (!session?.accessToken || !session.spreadsheetId) return null;
   return { token: session.accessToken, spreadsheetId: session.spreadsheetId };
@@ -94,9 +59,9 @@ function friendlySheetsError(e: unknown): string {
   }
   if (isAuthExpiredError(message)) {
     return (
-      'Google session expired.\n\n' +
-      'Open Account → Sign out, then sign in again so Sheets sync can get a fresh token. ' +
-      'Your sheet link and local data stay on the phone.'
+      'Google session expired for Sheet sync.\n\n' +
+      'Sign in with Google again from Account to sync purchases. ' +
+      'Your app data stays on this phone — you can keep using AppCash offline.'
     );
   }
   return message;
@@ -107,7 +72,7 @@ export async function ensureSpreadsheet(): Promise<string | null> {
   if (!session?.accessToken) return null;
   if (!session.spreadsheetId) return null;
   try {
-    await ensureWorkbookStructure(session.accessToken, session.spreadsheetId);
+    await ensurePurchaseSheet(session.accessToken, session.spreadsheetId);
   } catch {
     // offline
   }
@@ -119,12 +84,12 @@ export async function createAndLinkSpreadsheet(title?: string): Promise<string |
   if (!session?.accessToken) return null;
   if (session.spreadsheetId) return session.spreadsheetId;
 
-  const trimmed = title?.trim() || 'AppCash';
+  const trimmed = title?.trim() || 'AppCash Compras';
   const id = await createAppSpreadsheet(session.accessToken, trimmed);
   await saveGoogleSession({ ...session, spreadsheetId: id });
   await setSetting('spreadsheet_id', id);
   try {
-    await pushFullSnapshot();
+    await pushPurchasesSnapshot();
     lastSyncAtMs = Date.now();
   } catch {
     // offline / quota
@@ -139,7 +104,7 @@ export async function linkSpreadsheetFromInput(raw: string): Promise<{
 }> {
   const session = (await refreshGoogleAccessToken()) ?? (await loadGoogleSession());
   if (!session?.accessToken) {
-    return { ok: false, message: 'Sign in with Google first.' };
+    return { ok: false, message: 'Sign in with Google first to link a purchase sheet.' };
   }
   const id = parseSpreadsheetId(raw);
   if (!id) {
@@ -148,14 +113,15 @@ export async function linkSpreadsheetFromInput(raw: string): Promise<{
       message: 'Paste the full Google Sheets URL or the spreadsheet ID.',
     };
   }
-  await ensureWorkbookStructure(session.accessToken, id);
+  await ensurePurchaseSheet(session.accessToken, id);
   await saveGoogleSession({ ...session, spreadsheetId: id });
   await setSetting('spreadsheet_id', id);
   const result = await syncNow({ force: true, push: true, pull: true });
   return { ok: result.ok, spreadsheetId: id, message: result.message };
 }
 
-export async function unlinkSpreadsheetAndWipeLocal(): Promise<void> {
+/** Unlink sheet only — keeps all local app data. */
+export async function unlinkSpreadsheet(): Promise<void> {
   const session = await loadGoogleSession();
   if (session) {
     await saveGoogleSession({
@@ -168,6 +134,12 @@ export async function unlinkSpreadsheetAndWipeLocal(): Promise<void> {
     });
   }
   await setSetting('spreadsheet_id', '');
+}
+
+/** Unlink sheet and wipe local finance data. */
+export async function unlinkSpreadsheetAndWipeLocal(): Promise<void> {
+  await unlinkSpreadsheet();
+  const session = await loadGoogleSession();
   await clearFinanceData();
   await ensureHouseholdDefaults(session?.name || 'Me', session?.email || '', session?.photoUrl || '');
 }
@@ -176,151 +148,48 @@ export function getSpreadsheetOpenUrl(spreadsheetId: string): string {
   return spreadsheetEditUrl(spreadsheetId);
 }
 
-async function buildSnapshots(): Promise<Array<{ sheet: SheetName; rows: string[][] }>> {
-  const [users, categories, fixed, transactions, receipts, receiptItems, goals, notifs, products] =
-    await Promise.all([
-      listUsers(),
-      listCategories(),
-      listFixedItems(),
-      listTransactions(),
-      listReceipts(),
-      listReceiptItems(),
-      listSavingsGoals(),
-      listNotifications(),
-      listProductStats(),
-    ]);
+function isPurchaseTx(tx: Transaction): boolean {
+  return tx.type === 'expense_sporadic' || tx.type === 'variable';
+}
 
+/** One Sheet row per local purchase (receipt = one total row; no line-items). */
+async function buildPurchaseRows(): Promise<string[][]> {
+  const [users, categories, transactions] = await Promise.all([
+    listUsers(),
+    listCategories(),
+    listTransactions(),
+  ]);
   const userName = (id: string) => users.find((u) => u.id === id)?.name ?? '';
   const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? '';
 
-  const usuarios = users.map((u) => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-    photo: u.avatar_url,
-  }));
-
-  const categorias = categories.map((c) => ({
-    id: c.id,
-    name: c.name,
-    type: categoryTypeLabel(c.type),
-    icon: c.icon,
-    color: c.color,
-  }));
-
-  const gastos = fixed.map((f) => ({
-    id: f.id,
-    name: f.name,
-    who: userName(f.user_id),
-    category: catName(f.category_id),
-    amount: f.amount_aud,
-    period: periodLabel(f.period),
-    direction: directionLabel(f.direction),
-    auto_debit: f.auto_debit,
-    notify_days: f.notify_days_before,
-    active: f.active,
-    next_due: f.next_due,
-  }));
-
-  const receiptById = new Map(receipts.map((r) => [r.id, r]));
-  const txWithReceipt = new Set(
-    transactions.filter((t) => t.receipt_id).map((t) => t.receipt_id as string)
-  );
-
-  const compras: Array<Record<string, unknown>> = [];
-  for (const item of receiptItems) {
-    const receipt = receiptById.get(item.receipt_id);
-    if (!receipt) continue;
-    const purchased = receipt.purchased_at || nowIso();
-    const date = purchased.slice(0, 10);
-    const time = purchased.includes('T') ? purchased.slice(11, 16) : '12:00';
-    const parentTx = transactions.find((t) => t.receipt_id === receipt.id);
-    compras.push({
-      id: item.id,
-      date,
-      time,
-      who: userName(receipt.user_id),
-      category: item.category_guess || (parentTx ? catName(parentTx.category_id) : ''),
-      item: item.name,
-      qty: item.qty,
-      unit_price: item.unit_price_aud,
-      line_total: item.line_total_aud,
-    });
-  }
+  const rows: Array<Record<string, unknown>> = [];
   for (const tx of transactions) {
-    if (tx.receipt_id && txWithReceipt.has(tx.receipt_id)) continue;
-    const created = tx.created_at || `${tx.date}T12:00:00`;
-    const time = created.includes('T') ? created.slice(11, 16) : '12:00';
-    compras.push({
+    if (!isPurchaseTx(tx)) continue;
+    rows.push({
+      Fecha: tx.date,
+      Quién: userName(tx.user_id),
+      Descripción: tx.merchant || tx.note || 'Purchase',
+      Categoría: catName(tx.category_id),
+      Monto: tx.amount_aud,
       id: tx.id,
-      date: tx.date,
-      time,
-      who: userName(tx.user_id),
-      category: catName(tx.category_id),
-      item: tx.merchant || tx.note || transactionTypeLabel(tx.type),
-      qty: 1,
-      unit_price: tx.amount_aud,
-      line_total: tx.amount_aud,
     });
   }
 
-  const ahorros = goals.map((g) => ({
-    id: g.id,
-    name: g.name,
-    target: g.target_aud,
-    current: g.current_aud,
-    deadline: g.deadline,
-    who: userName(g.user_id),
-    kind: g.kind,
-    color: g.color,
-    icon: g.icon || '',
-    plan: g.plan_mode,
-    contribution: g.contribution_aud,
-    frequency: g.contribution_frequency,
-    yield_mode: g.yield_mode,
-    annual_rate: g.annual_rate,
-    reminder: g.reminder,
-    updated_at: g.updated_at,
-  }));
-
-  const sysRecibos = receipts.map((r) => ({ ...r }));
-  const sysItems = receiptItems.map((r) => ({ ...r }));
-  const sysAvisos = notifs.map((n) => ({ ...n }));
-  const sysMercado = products.map((p) => ({ ...p }));
-
-  const configKeys = ['currency', 'week_starts', 'sync_interval_sec', 'active_user_id', 'gemini_model'];
-  const sysConfig: Array<{ key: string; value: string }> = [];
-  for (const key of configKeys) {
-    const value = await getSetting(key);
-    if (value != null) sysConfig.push({ key, value });
-  }
-
-  return [
-    { sheet: 'Users', rows: serializeRows('Users', usuarios) },
-    { sheet: 'Categories', rows: serializeRows('Categories', categorias) },
-    { sheet: 'Fixed', rows: serializeRows('Fixed', gastos) },
-    { sheet: 'Purchases', rows: serializeRows('Purchases', compras) },
-    { sheet: 'Savings', rows: serializeRows('Savings', ahorros) },
-    { sheet: '_sys_receipts', rows: serializeRows('_sys_receipts', sysRecibos) },
-    { sheet: '_sys_receipt_items', rows: serializeRows('_sys_receipt_items', sysItems) },
-    { sheet: '_sys_notifications', rows: serializeRows('_sys_notifications', sysAvisos) },
-    { sheet: '_sys_market', rows: serializeRows('_sys_market', sysMercado) },
-    { sheet: '_sys_config', rows: serializeRows('_sys_config', sysConfig) },
-  ];
+  return serializeRows('Purchases', rows);
 }
 
 async function resolveUserId(quien: string, cache: AppUser[]): Promise<string> {
   const match = cache.find((u) => u.name.toLowerCase() === quien.trim().toLowerCase());
   if (match) return match.id;
-  if (cache[0]) return cache[0].id;
+  if (!quien.trim() && cache[0]) return cache[0].id;
+  if (cache[0] && !quien.trim()) return cache[0].id;
   const id = createId();
   const user: AppUser = {
     id,
     name: quien.trim() || 'Me',
     email: '',
     avatar_url: '',
-    role: 'owner',
+    role: cache.some((u) => u.role === 'owner') ? 'member' : 'owner',
     updated_at: nowIso(),
   };
   await upsertUser(user);
@@ -330,17 +199,19 @@ async function resolveUserId(quien: string, cache: AppUser[]): Promise<string> {
 
 async function resolveCategoryId(
   categoria: string,
-  hintType: string,
   cache: Category[]
 ): Promise<string> {
-  const match = cache.find((c) => c.name.toLowerCase() === categoria.trim().toLowerCase());
+  const name = categoria.trim() || 'Groceries';
+  const match = cache.find((c) => c.name.toLowerCase() === name.toLowerCase());
   if (match) return match.id;
+  const groceries = cache.find((c) => c.name.toLowerCase() === 'groceries');
+  if (!categoria.trim() && groceries) return groceries.id;
   const id = createId();
   const cat: Category = {
     id,
-    name: categoria.trim() || 'Extras',
-    type: asCategoryType(hintType),
-    icon: 'cube',
+    name,
+    type: asCategoryType('expense'),
+    icon: 'cart',
     color: CategoryPalette[cache.length % CategoryPalette.length],
     is_system: false,
     updated_at: nowIso(),
@@ -350,271 +221,95 @@ async function resolveCategoryId(
   return id;
 }
 
-function parseSysTable<T extends { id: string }>(
-  values: string[][],
-  mapRow: (o: Record<string, string>) => T | null
-): T[] {
-  if (!values.length) return [];
-  const [header, ...rows] = values;
-  const out: T[] = [];
-  for (const row of rows) {
-    if (!row.some((c) => String(c).trim().length)) continue;
-    const o: Record<string, string> = {};
-    header.forEach((h, i) => {
-      o[h.trim().toLowerCase()] = row[i] ?? '';
-    });
-    const mapped = mapRow(o);
-    if (mapped?.id) out.push(mapped);
-  }
-  return out;
-}
-
+/**
+ * Pull only the Purchases tab and merge into local transactions.
+ * Never replaces users, categories, fixed, savings, or other system data.
+ */
 export async function pullFromSheets(): Promise<boolean> {
   const access = await getAccess();
   if (!access) return false;
 
-  const all = await batchReadSheets(access.token, access.spreadsheetId);
-
-  // 1) Users
-  const usuarioRows = parseUsuarioRows(all.Users ?? []);
-  if (usuarioRows.length > 0) {
-    const users: AppUser[] = usuarioRows.map((r) => ({
-      id: r.id || createId(),
-      name: r.name || 'User',
-      email: r.email,
-      avatar_url: r.photo || '',
-      role: r.role || 'member',
-      updated_at: nowIso(),
-    }));
-    await replaceSheetRows('users', users, upsertUser);
-  }
-
-  // 2) Categories
-  const catRows = parseCategoriaRows(all.Categories ?? []);
-  if (catRows.length > 0) {
-    const cats: Category[] = catRows.map((r, i) => ({
-      id: r.id || createId(),
-      name: r.name || 'Category',
-      type: asCategoryType(r.type),
-      icon: r.icon || 'cube',
-      color: r.color || CategoryPalette[i % CategoryPalette.length],
-      is_system: false,
-      updated_at: nowIso(),
-    }));
-    await replaceSheetRows('categories', cats, upsertCategory);
-  }
-
-  let users = await listUsers();
-  let categories = await listCategories();
-
-  // 3) Fixed
-  const fijoRows = parseGastoFijoRows(all.Fixed ?? []);
-  if (fijoRows.length > 0) {
-    const items: FixedItem[] = [];
-    for (const r of fijoRows) {
-      items.push({
-        id: r.id || createId(),
-        user_id: await resolveUserId(r.who, users),
-        category_id: await resolveCategoryId(r.category, r.direction, categories),
-        name: r.name || 'Fixed',
-        amount_aud: r.amount,
-        period: parsePeriod(r.period),
-        direction: parseDirection(r.direction),
-        auto_debit: r.auto_debit,
-        notify_days_before: r.notify_days,
-        active: r.active,
-        next_due: r.next_due,
-        updated_at: nowIso(),
-      });
-    }
-    await replaceSheetRows('fixed_items', items, upsertFixedItem);
-  }
-
-  users = await listUsers();
-  categories = await listCategories();
-
-  // System receipts first — Purchases sheet also lists line items and must not wipe real txs.
-  const recibos = parseSysTable(all._sys_receipts ?? [], (o) => ({
-    id: o.id,
-    user_id: o.user_id,
-    store: o.store,
-    total_aud: Number(o.total_aud) || 0,
-    photo_uri_or_drive_id: o.photo_uri_or_drive_id,
-    purchased_at: o.purchased_at,
-    raw_gemini_json: o.raw_gemini_json,
-    updated_at: o.updated_at || nowIso(),
-  })) as Receipt[];
-  if (recibos.length) await replaceSheetRows('receipts', recibos, upsertReceipt);
-
-  const receiptItemsRows = parseSysTable(all._sys_receipt_items ?? [], (o) => ({
-    id: o.id,
-    receipt_id: o.receipt_id,
-    name: o.name,
-    qty: Number(o.qty) || 0,
-    unit_price_aud: Number(o.unit_price_aud) || 0,
-    line_total_aud: Number(o.line_total_aud) || 0,
-    category_guess: o.category_guess,
-    updated_at: o.updated_at || nowIso(),
-  })) as ReceiptItem[];
-  if (receiptItemsRows.length) {
-    await replaceSheetRows('receipt_items', receiptItemsRows, upsertReceiptItem);
-  }
-
-  const receiptItemIds = new Set(receiptItemsRows.map((i) => i.id));
-  const grocery =
-    categories.find((c) => c.name.toLowerCase() === 'groceries') ??
-    categories.find((c) => c.type === 'expense') ??
-    categories[0];
-
-  // 4) Build purchase-level transactions (one per receipt + standalone expenses)
+  const all = await batchReadSheets(access.token, access.spreadsheetId, ['Purchases'], true);
   const compras = parseCompraRows(all.Purchases ?? []);
-  const txs: Transaction[] = [];
-
-  for (const receipt of recibos) {
-    const purchased = receipt.purchased_at || nowIso();
-    const date = purchased.slice(0, 10);
-    const time = purchased.includes('T') ? purchased.slice(11, 16) : '12:00';
-    txs.push({
-      id: `tx_${receipt.id}`,
-      user_id: receipt.user_id || users[0]?.id || createId(),
-      type: 'expense_sporadic',
-      category_id: grocery?.id || '',
-      amount_aud: receipt.total_aud,
-      date,
-      note: `Receipt ${receipt.store || ''}`.trim(),
-      merchant: receipt.store || 'Supermarket',
-      receipt_id: receipt.id,
-      created_at: `${date}T${time}:00`,
-      updated_at: nowIso(),
-    });
+  if (!compras.length) {
+    await setSetting('last_sync_at', nowIso());
+    return true;
   }
+
+  const users = await listUsers();
+  const categories = await listCategories();
+  const existing = await listTransactions();
+  const byId = new Map(existing.map((t) => [t.id, t]));
 
   for (const row of compras) {
-    // Line items live only in receipt_items — never as loose transactions
-    if (!row.id || receiptItemIds.has(row.id)) continue;
-    if (txs.some((t) => t.id === row.id || t.id === `tx_${row.id}`)) continue;
-    const date = row.date || nowIso().slice(0, 10);
+    const amount = row.line_total || row.unit_price * (row.qty || 1);
+    if (!amount && !row.item && !row.date) continue;
+
+    const date = (row.date || nowIso().slice(0, 10)).slice(0, 10);
     const time = (row.time || '12:00').slice(0, 5);
-    const label = (row.item || '').trim() || 'Purchase';
-    // Product names stay inside the purchase; merchants are stores / real payees
-    if (isLikelyProductName(label)) continue;
-    txs.push({
-      id: row.id,
+    const id = row.id?.trim() || createId();
+    const prev = byId.get(id);
+
+    const tx: Transaction = {
+      id,
       user_id: await resolveUserId(row.who, users),
       type: 'expense_sporadic',
-      category_id:
-        grocery?.id || (await resolveCategoryId(row.category || 'Groceries', 'expense', categories)),
-      amount_aud: row.line_total || row.unit_price * (row.qty || 1),
+      category_id: await resolveCategoryId(row.category, categories),
+      amount_aud: amount,
       date,
-      note: label,
-      merchant: label,
-      receipt_id: '',
-      created_at: `${date}T${time}:00`,
+      note: (row.item || '').trim() || prev?.note || 'Purchase',
+      merchant: (row.item || '').trim() || prev?.merchant || 'Purchase',
+      receipt_id: prev?.receipt_id || '',
+      created_at: prev?.created_at || `${date}T${time}:00`,
       updated_at: nowIso(),
-    });
-  }
-
-  if (txs.length > 0) {
-    await replaceSheetRows('transactions', txs, upsertTransaction);
-  }
-
-  // 5) Savings
-  const ahorros = parseAhorroRows(all.Savings ?? []);
-  if (ahorros.length > 0) {
-    const goals: SavingsGoal[] = [];
-    for (const row of ahorros) {
-      const freq =
-        row.frequency === 'weekly' || row.frequency === 'semanal'
-          ? 'weekly'
-          : row.frequency === 'fortnightly' || row.frequency === 'quincenal'
-            ? 'fortnightly'
-            : 'monthly';
-      const plan = row.plan === 'deadline' || row.plan === 'fecha' ? 'deadline' : 'contribution';
-      const yieldMode =
-        row.yield_mode === 'yield' || row.yield_mode === 'con' || row.yield_mode === 'si'
-          ? 'yield'
-          : 'none';
-      goals.push({
-        id: row.id || createId(),
-        name: row.name || 'Goal',
-        target_aud: row.target,
-        current_aud: row.current,
-        deadline: row.deadline,
-        user_id: await resolveUserId(row.who, users),
-        updated_at: row.updated_at || nowIso(),
-        kind: (row.kind as SavingsGoal['kind']) || 'other',
-        color: row.color || '#3DE7FF',
-        icon: row.icon || '',
-        plan_mode: plan,
-        contribution_aud: row.contribution,
-        contribution_frequency: freq,
-        yield_mode: yieldMode,
-        annual_rate: row.annual_rate,
-        reminder: row.reminder,
-      });
-    }
-    await replaceSheetRows('savings_goals', goals, upsertSavingsGoal);
-  }
-
-  // 6) Remaining system sheets (receipts already applied)
-  const avisos = parseSysTable(all._sys_notifications ?? [], (o) => ({
-    id: o.id,
-    user_id: o.user_id,
-    title: o.title,
-    body: o.body,
-    due_at: o.due_at,
-    related_fixed_id: o.related_fixed_id,
-    status: (o.status === 'sent' || o.status === 'read' ? o.status : 'pending') as AppNotification['status'],
-    updated_at: o.updated_at || nowIso(),
-  })) as AppNotification[];
-  if (avisos.length) await replaceSheetRows('notifications', avisos, upsertNotification);
-
-  const mercado = parseSysTable(all._sys_market ?? [], (o) => ({
-    id: o.id,
-    product_name_normalized: o.product_name_normalized,
-    avg_price: Number(o.avg_price) || 0,
-    buy_frequency_days: Number(o.buy_frequency_days) || 0,
-    last_seen: o.last_seen,
-    purchase_count: Number(o.purchase_count) || 0,
-    updated_at: o.updated_at || nowIso(),
-  })) as ProductStat[];
-  if (mercado.length) await replaceSheetRows('product_stats', mercado, upsertProductStat);
-
-  const configVals = all._sys_config ?? [];
-  if (configVals.length > 1) {
-    const [header, ...rows] = configVals;
-    for (const row of rows) {
-      const o: Record<string, string> = {};
-      header.forEach((h, i) => {
-        o[h.trim().toLowerCase()] = row[i] ?? '';
-      });
-      const key = o.key || o.clave;
-      const value = o.value || o.valor;
-      if (key) await setSetting(key, value);
-    }
+    };
+    await upsertTransaction(tx);
+    byId.set(id, tx);
   }
 
   await setSetting('last_sync_at', nowIso());
   return true;
 }
 
-export async function pushFullSnapshot(): Promise<boolean> {
+export async function pushPurchasesSnapshot(): Promise<boolean> {
   const access = await getAccess();
   if (!access) return false;
 
-  await ensureWorkbookStructure(access.token, access.spreadsheetId);
-  const payload = await buildSnapshots();
-  await batchWriteAllSheets(access.token, access.spreadsheetId, payload);
+  await ensurePurchaseSheet(access.token, access.spreadsheetId);
+  const rows = await buildPurchaseRows();
+  await batchWriteAllSheets(access.token, access.spreadsheetId, [
+    { sheet: 'Purchases', rows },
+  ]);
   await setSetting('last_sync_at', nowIso());
   return true;
 }
 
-/** Debounce rapid saves (e.g. receipt line items) into one Sheets write. */
+/** @deprecated Alias — push is purchases-only now. */
+export async function pushFullSnapshot(): Promise<boolean> {
+  return pushPurchasesSnapshot();
+}
+
 const PUSH_DEBOUNCE_MS = 1_200;
+/** Auto retries: 12s → 30s → 1m → 2m → 5m… then stop (max 8 attempts). */
+const MAX_AUTO_SYNC_ATTEMPTS = 8;
+const BACKOFF_MS = [12_000, 30_000, 60_000, 120_000, 300_000] as const;
 let pushDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+function nextAutoRetryDelay(attemptsAfterBump: number): number | null {
+  if (attemptsAfterBump >= MAX_AUTO_SYNC_ATTEMPTS) return null;
+  return BACKOFF_MS[Math.min(attemptsAfterBump, BACKOFF_MS.length - 1)] ?? null;
+}
+
+async function maxOutboxAttempts(): Promise<number> {
+  const pending = await listOutbox();
+  if (!pending.length) return 0;
+  return Math.max(...pending.map((p) => p.attempts));
+}
+
 /**
- * Queue a local change and schedule an automatic push to Google Sheets.
+ * Queue a local change and schedule an automatic purchases push when Sheet is linked.
+ * Failed syncs retry with backoff up to MAX_AUTO_SYNC_ATTEMPTS, then pause until
+ * manual Sync or app foreground (which resets the counter).
  */
 export async function queueMutation(entity: string, payload: unknown): Promise<void> {
   await enqueueOutbox({
@@ -628,18 +323,37 @@ export async function queueMutation(entity: string, payload: unknown): Promise<v
   scheduleSheetPush();
 }
 
-/** After any edit, push to Sheets soon (coalesced). */
-export function scheduleSheetPush(): void {
+export function scheduleSheetPush(delayMs = PUSH_DEBOUNCE_MS): void {
   if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
   pushDebounceTimer = setTimeout(() => {
     pushDebounceTimer = null;
     void pushPendingChanges();
-  }, PUSH_DEBOUNCE_MS);
+  }, delayMs);
 }
 
 async function pushPendingChanges(): Promise<void> {
+  const pending = await listOutbox();
+  if (!pending.length) return;
+
+  const attempts = Math.max(...pending.map((p) => p.attempts));
+  if (attempts >= MAX_AUTO_SYNC_ATTEMPTS) {
+    // Paused — data stays local; user must Sync now or reopen the app.
+    return;
+  }
+
+  const session = await loadGoogleSession();
+  if (!session?.spreadsheetId) {
+    // Sheet not linked: keep outbox but do not spin forever.
+    return;
+  }
+
   const access = await getAccess();
-  if (!access) return;
+  if (!access) {
+    const next = await bumpAllOutboxAttempts();
+    const delay = nextAutoRetryDelay(next);
+    if (delay != null) scheduleSheetPush(delay);
+    return;
+  }
 
   if (syncInFlight) {
     try {
@@ -649,22 +363,74 @@ async function pushPendingChanges(): Promise<void> {
     }
   }
 
-  const pending = await listOutbox();
-  if (!pending.length) return;
-
-  await syncNow({ force: true, push: true, pull: false });
-
+  const result = await syncNow({ force: true, push: true, pull: false });
   const stillPending = await listOutbox();
-  if (stillPending.length) scheduleSheetPush();
+  if (!result.ok || stillPending.length) {
+    const next = await bumpAllOutboxAttempts();
+    const delay = nextAutoRetryDelay(next);
+    if (delay != null) scheduleSheetPush(delay);
+  }
+}
+
+/**
+ * Flush pending purchases.
+ * `force: true` resets attempt counters (manual Sync / returning to app after pause).
+ */
+export async function flushPendingPurchasesSync(opts?: {
+  force?: boolean;
+}): Promise<{
+  ok: boolean;
+  mode: 'local' | 'sheets';
+  message: string;
+  paused?: boolean;
+}> {
+  const force = opts?.force ?? false;
+  if (force) await resetOutboxAttempts();
+
+  const pending = await listOutbox();
+  const attempts = await maxOutboxAttempts();
+
+  if (!force && pending.length && attempts >= MAX_AUTO_SYNC_ATTEMPTS) {
+    return {
+      ok: false,
+      mode: 'sheets',
+      paused: true,
+      message:
+        'Purchase sync paused after several failed attempts. Your data is safe on this phone — tap Sync purchases now when you have connection.',
+    };
+  }
+
+  const access = await getAccess();
+  if (!access) {
+    if (pending.length && (await loadGoogleSession())?.spreadsheetId) {
+      const next = force ? 1 : await bumpAllOutboxAttempts();
+      const delay = nextAutoRetryDelay(next);
+      if (delay != null) scheduleSheetPush(delay);
+    }
+    return {
+      ok: true,
+      mode: 'local',
+      message: pending.length
+        ? `${pending.length} purchase change(s) waiting on this phone.`
+        : 'Working offline — purchases stay on this phone.',
+    };
+  }
+
+  return syncNow({ force: true, push: true, pull: true });
 }
 
 export async function flushOutbox(): Promise<void> {
   const access = await getAccess();
-  if (!access) return;
+  if (!access) {
+    const next = await bumpAllOutboxAttempts();
+    const delay = nextAutoRetryDelay(next);
+    if (delay != null) scheduleSheetPush(delay);
+    return;
+  }
   const pending = await listOutbox();
   if (!pending.length) return;
   try {
-    await pushFullSnapshot();
+    await pushPurchasesSnapshot();
     for (const item of pending) {
       await removeOutbox(item.id);
     }
@@ -672,8 +438,18 @@ export async function flushOutbox(): Promise<void> {
     for (const item of pending) {
       await bumpOutboxAttempt(item.id);
     }
+    const next = await maxOutboxAttempts();
+    const delay = nextAutoRetryDelay(next);
+    if (delay != null) scheduleSheetPush(delay);
     throw new Error('flush failed');
   }
+}
+
+export function getPurchaseSyncRetryPolicy() {
+  return {
+    maxAttempts: MAX_AUTO_SYNC_ATTEMPTS,
+    backoffMs: [...BACKOFF_MS],
+  };
 }
 
 export async function syncNow(opts?: {
@@ -693,7 +469,8 @@ export async function syncNow(opts?: {
       return {
         ok: true,
         mode: 'local' as const,
-        message: 'Local mode — paste your Sheet URL in Settings to sync.',
+        message:
+          'Working offline — purchases stay on this phone. Link a Sheet in Account when you want to share the Compras list.',
       };
     }
 
@@ -703,7 +480,7 @@ export async function syncNow(opts?: {
       return {
         ok: true,
         mode: 'sheets' as const,
-        message: `Synced recently — next Sheets sync in ~${waitSec}s (quota protection).`,
+        message: `Synced recently — next purchase sync in ~${waitSec}s.`,
       };
     }
 
@@ -712,7 +489,7 @@ export async function syncNow(opts?: {
       const shouldPush = wantPush && (force || pending.length > 0);
 
       if (shouldPush) {
-        await pushFullSnapshot();
+        await pushPurchasesSnapshot();
         for (const item of pending) {
           await removeOutbox(item.id);
         }
@@ -727,8 +504,8 @@ export async function syncNow(opts?: {
         ok: true,
         mode: 'sheets' as const,
         message: shouldPush
-          ? 'Synced editable sheets + system backup to Google Sheets.'
-          : 'Refreshed from Google Sheets.',
+          ? 'Purchases synced to Google Sheets (Compras list). Categories & bills stay on the phone.'
+          : 'Purchases refreshed from Google Sheets.',
       };
     } catch (e) {
       return { ok: false, mode: 'sheets' as const, message: friendlySheetsError(e) };

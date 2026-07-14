@@ -1,14 +1,21 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii } from '@/constants/theme';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useFinanceStore } from '@/stores/finance-store';
 
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
+function TabIcon({
+  name,
+  focused,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  focused: boolean;
+}) {
   return (
     <View style={[styles.iconWrap, focused && styles.iconFocused]}>
-      <Text style={[styles.iconGlyph, focused && styles.iconGlyphFocused]}>{label}</Text>
+      <Ionicons name={name} size={20} color={focused ? Palette.cyan : Palette.textDim} />
     </View>
   );
 }
@@ -45,6 +52,7 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: Palette.panel,
           borderTopColor: Palette.stroke,
+          borderTopWidth: StyleSheet.hairlineWidth,
           height: tabBarHeight,
           paddingBottom: bottomInset,
           paddingTop: 6,
@@ -59,7 +67,7 @@ export default function TabsLayout() {
         headerRight: () => (
           <View style={styles.headerRight}>
             <Pressable onPress={() => router.push('/notifications' as never)} style={styles.headerBtn}>
-              <Text style={styles.headerBtnText}>🔔</Text>
+              <Ionicons name="notifications-outline" size={20} color={Palette.text} />
             </Pressable>
             <HeaderProfileButton />
           </View>
@@ -69,14 +77,14 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ focused }) => <TabIcon label="◈" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="home-outline" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
           title: 'Search',
-          tabBarIcon: ({ focused }) => <TabIcon label="⌕" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="search-outline" focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -85,7 +93,7 @@ export default function TabsLayout() {
           title: 'Add',
           tabBarIcon: ({ focused }) => (
             <View style={[styles.addBtn, focused && styles.addBtnFocused]}>
-              <Text style={styles.addPlus}>+</Text>
+              <Ionicons name="add" size={28} color={Palette.void} />
             </View>
           ),
         }}
@@ -94,14 +102,14 @@ export default function TabsLayout() {
         name="savings"
         options={{
           title: 'Savings',
-          tabBarIcon: ({ focused }) => <TabIcon label="◈" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="wallet-outline" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'More',
-          tabBarIcon: ({ focused }) => <TabIcon label="☰" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="menu-outline" focused={focused} />,
         }}
       />
     </Tabs>
@@ -116,9 +124,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconFocused: { backgroundColor: 'rgba(61,231,255,0.15)' },
-  iconGlyph: { color: Palette.textDim, fontSize: 16 },
-  iconGlyphFocused: { color: Palette.cyan },
+  iconFocused: { backgroundColor: 'rgba(61,231,255,0.12)' },
   addBtn: {
     width: 46,
     height: 46,
@@ -127,13 +133,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: -18,
-    shadowColor: Palette.cyan,
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 6,
   },
   addBtnFocused: { transform: [{ scale: 1.05 }] },
-  addPlus: { color: Palette.void, fontSize: 28, fontWeight: '700', marginTop: -2 },
   headerRight: { flexDirection: 'row', gap: 8, marginRight: 12 },
   headerBtn: {
     width: 34,
@@ -143,5 +144,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  headerBtnText: { fontSize: 14 },
 });

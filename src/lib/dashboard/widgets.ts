@@ -1,7 +1,8 @@
 import type { PeriodStats } from '@/hooks/use-period-stats';
 import { getSetting, setSetting } from '@/lib/db';
 
-export const WIDGET_PREF_KEY = 'dashboard_widgets_v1';
+/** Bumped with Calm Ledger / offline-first defaults. */
+export const WIDGET_PREF_KEY = 'dashboard_widgets_v2';
 
 export type DashboardWidgetId =
   | 'period_budget'
@@ -25,13 +26,13 @@ export type WidgetDef = {
   defaultOn: boolean;
 };
 
-/** Fixed display / settings order. */
+/** Primary strip defaults ON; rest under More / prefs. */
 export const DASHBOARD_WIDGETS: WidgetDef[] = [
   {
     id: 'period_budget',
     label: 'Period Budget',
     hint: 'Fixed, variable and savings vs income',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'period_expenses',
@@ -43,7 +44,7 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
     id: 'trend',
     label: 'Trend',
     hint: 'Income vs expenses across weeks',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'expenses_by_person',
@@ -61,13 +62,13 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
     id: 'cashflow',
     label: 'Cashflow Summary',
     hint: 'Fixed and sporadic in/out',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'market',
     label: 'Market',
     hint: 'Grocery week vs average',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'daily_spend',
@@ -79,7 +80,7 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
     id: 'upcoming_buys',
     label: 'Upcoming Buys',
     hint: 'Likely purchases from receipts',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'upcoming_bills',
@@ -91,20 +92,39 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
     id: 'top_merchants',
     label: 'Top Merchants',
     hint: 'Where money went this period',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'goals_pace',
     label: 'Goals Pace',
     hint: 'On track vs behind',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'converter',
     label: 'Converter COP ↔ AUD',
     hint: 'Live exchange rate',
-    defaultOn: true,
+    defaultOn: false,
   },
+];
+
+export const HOME_PRIMARY_ORDER: DashboardWidgetId[] = [
+  'period_expenses',
+  'expenses_by_person',
+  'daily_spend',
+  'upcoming_bills',
+  'savings_goals',
+];
+
+export const HOME_SECONDARY_ORDER: DashboardWidgetId[] = [
+  'period_budget',
+  'trend',
+  'cashflow',
+  'market',
+  'upcoming_buys',
+  'top_merchants',
+  'goals_pace',
+  'converter',
 ];
 
 export type WidgetPrefs = Record<DashboardWidgetId, boolean>;

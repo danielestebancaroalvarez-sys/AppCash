@@ -1,7 +1,9 @@
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel } from '@/components/ui/Primitives';
+import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
+import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { AppBalanceCard } from '@/components/dashboard/AppBalanceCard';
 import { PeriodBudgetWidget } from '@/components/dashboard/PeriodBudgetWidget';
@@ -24,13 +26,49 @@ import { useWidgetPrefs } from '@/hooks/use-widget-prefs';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { recomputeProductStats } from '@/lib/insights/market';
 import {
+  HOME_PRIMARY_ORDER,
+  HOME_SECONDARY_ORDER,
   periodHasAnyData,
   widgetHasData,
   type DashboardWidgetId,
 } from '@/lib/dashboard/widgets';
 
+function renderWidget(id: DashboardWidgetId, stats: ReturnType<typeof usePeriodStats>) {
+  switch (id) {
+    case 'period_budget':
+      return <PeriodBudgetWidget stats={stats} />;
+    case 'period_expenses':
+      return <PeriodExpensesWidget stats={stats} />;
+    case 'trend':
+      return <TrendWidget stats={stats} />;
+    case 'expenses_by_person':
+      return <ExpensesByPersonWidget stats={stats} />;
+    case 'savings_goals':
+      return <SavingsGoalsWidget stats={stats} />;
+    case 'cashflow':
+      return <CashflowWidget stats={stats} />;
+    case 'market':
+      return <MarketWidget stats={stats} />;
+    case 'daily_spend':
+      return <DailySpendWidget stats={stats} />;
+    case 'upcoming_buys':
+      return <UpcomingBuysWidget stats={stats} />;
+    case 'upcoming_bills':
+      return <UpcomingBillsWidget stats={stats} />;
+    case 'top_merchants':
+      return <TopMerchantsWidget stats={stats} />;
+    case 'goals_pace':
+      return <GoalsPaceWidget stats={stats} />;
+    case 'converter':
+      return <ConverterWidget />;
+    default:
+      return null;
+  }
+}
+
 export default function DashboardScreen() {
   const syncMessage = useFinanceStore((s) => s.syncMessage);
+  const session = useFinanceStore((s) => s.session);
   const stats = usePeriodStats();
   const { isEnabled } = useWidgetPrefs();
   const { refreshing, onRefresh } = useSheetRefresh(async () => {
@@ -39,11 +77,19 @@ export default function DashboardScreen() {
 
   const show = (id: DashboardWidgetId) => isEnabled(id) && widgetHasData(id, stats);
   const emptyPeriod = !periodHasAnyData(stats);
+  const primaryIds = HOME_PRIMARY_ORDER.filter(show);
+  const secondaryIds = HOME_SECONDARY_ORDER.filter(show);
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <PeriodSelector />
       <AppBalanceCard stats={stats} />
+
+      {!session?.spreadsheetId ? (
+        <Text style={styles.offlineHint}>
+          Offline ledger · purchase sheet optional (Account → Purchase sheet)
+        </Text>
+      ) : null}
 
       {emptyPeriod ? (
         <GlassPanel style={styles.emptyPanel}>
@@ -55,19 +101,31 @@ export default function DashboardScreen() {
         </GlassPanel>
       ) : null}
 
-      {show('period_budget') ? <PeriodBudgetWidget stats={stats} /> : null}
-      {show('period_expenses') ? <PeriodExpensesWidget stats={stats} /> : null}
-      {show('trend') ? <TrendWidget stats={stats} /> : null}
-      {show('expenses_by_person') ? <ExpensesByPersonWidget stats={stats} /> : null}
-      {show('savings_goals') ? <SavingsGoalsWidget stats={stats} /> : null}
-      {show('cashflow') ? <CashflowWidget stats={stats} /> : null}
-      {show('market') ? <MarketWidget stats={stats} /> : null}
-      {show('daily_spend') ? <DailySpendWidget stats={stats} /> : null}
-      {show('upcoming_buys') ? <UpcomingBuysWidget stats={stats} /> : null}
-      {show('upcoming_bills') ? <UpcomingBillsWidget stats={stats} /> : null}
-      {show('top_merchants') ? <TopMerchantsWidget stats={stats} /> : null}
-      {show('goals_pace') ? <GoalsPaceWidget stats={stats} /> : null}
-      {show('converter') ? <ConverterWidget /> : null}
+      {primaryIds.map((id) => (
+        <View key={id}>{renderWidget(id, stats)}</View>
+      ))}
+
+      {secondaryIds.length > 0 ? (
+        <CollapsibleWidget
+          accent={Palette.textDim}
+          defaultExpanded={false}
+          header={
+            <WidgetTitle
+              icon="layers-outline"
+              title="More this period"
+              iconColor={Palette.textMuted}
+            />
+          }
+          collapsedSummary={
+            <Text style={styles.moreSummary}>
+              {secondaryIds.length} more insight{secondaryIds.length === 1 ? '' : 's'}
+            </Text>
+          }>
+          {secondaryIds.map((id) => (
+            <View key={id}>{renderWidget(id, stats)}</View>
+          ))}
+        </CollapsibleWidget>
+      ) : null}
 
       {syncMessage ? <Text style={styles.sync}>{syncMessage}</Text> : null}
     </Screen>
@@ -75,6 +133,12 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  offlineHint: {
+    color: Palette.textDim,
+    fontFamily: Fonts.body,
+    fontSize: 12,
+    marginBottom: Spacing.sm,
+  },
   emptyPanel: {
     alignItems: 'center',
     gap: Spacing.sm,
@@ -93,6 +157,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
+  moreSummary: { color: Palette.textDim, fontSize: 12 },
   sync: {
     color: Palette.textDim,
     fontSize: 11,

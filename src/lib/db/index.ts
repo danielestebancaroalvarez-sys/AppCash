@@ -610,6 +610,19 @@ export async function bumpOutboxAttempt(id: string): Promise<void> {
   await db.runAsync('UPDATE outbox SET attempts = attempts + 1 WHERE id = ?', [id]);
 }
 
+export async function bumpAllOutboxAttempts(): Promise<number> {
+  const db = await getDb();
+  await db.runAsync('UPDATE outbox SET attempts = attempts + 1');
+  const row = await db.getFirstAsync<{ m: number }>('SELECT MAX(attempts) as m FROM outbox');
+  return row?.m ?? 0;
+}
+
+/** Clears attempt counters so a manual / foreground sync can try again. */
+export async function resetOutboxAttempts(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('UPDATE outbox SET attempts = 0');
+}
+
 export async function replaceSheetRows<T extends { id: string }>(
   table:
     | 'users'

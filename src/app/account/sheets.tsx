@@ -9,9 +9,11 @@ import {
   createAndLinkSpreadsheet,
   getSpreadsheetOpenUrl,
   linkSpreadsheetFromInput,
+  unlinkSpreadsheet,
   unlinkSpreadsheetAndWipeLocal,
 } from '@/lib/sync/engine';
-import { loadGoogleSession } from '@/lib/google/auth';
+import { isGoogleConfigured, loadGoogleSession, signInWithGoogleNative } from '@/lib/google/auth';
+import { seedIfNeeded } from '@/lib/db/seed';
 
 export default function AccountSheetsScreen() {
   const session = useFinanceStore((s) => s.session);
@@ -22,34 +24,60 @@ export default function AccountSheetsScreen() {
   const { alert, confirm, Dialog } = useAppDialog();
 
   const [sheetInput, setSheetInput] = useState(session?.spreadsheetId ?? '');
-  const [sheetName, setSheetName] = useState('AppCash');
+  const [sheetName, setSheetName] = useState('AppCash Compras');
   const [busy, setBusy] = useState(false);
   const hasSheet = Boolean(session?.spreadsheetId);
+  const hasGoogle = Boolean(session?.accessToken);
 
   useEffect(() => {
     setSheetInput(session?.spreadsheetId ?? '');
   }, [session?.spreadsheetId]);
 
+  const ensureGoogle = async (): Promise<boolean> => {
+    if (session?.accessToken) return true;
+    if (!isGoogleConfigured()) {
+      alert(
+        'Google not configured',
+        'Add Google Client IDs to .env and rebuild, or keep using the app offline.'
+      );
+      return false;
+    }
+    setBusy(true);
+    try {
+      const result = await signInWithGoogleNative();
+      if (!result.ok) {
+        if (!result.cancelled) alert('Could not sign in', result.message);
+        return false;
+      }
+      await seedIfNeeded(result.session.name, result.session.email, result.session.photoUrl ?? '');
+      setSession(result.session);
+      await refresh();
+      return true;
+    } catch (e) {
+      alert('Sign-in failed', e instanceof Error ? e.message : 'Unknown error');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onSync = async () => {
     if (!hasSheet) {
-      alert('No sheet linked', 'Paste your Google Sheet URL below, or create one.');
+      alert('No sheet linked', 'Create or paste a Google Sheet URL below.');
       return;
     }
     setBusy(true);
     try {
       await runSync();
-      alert('Sync', useFinanceStore.getState().syncMessage || 'Done');
+      alert('Purchases sync', useFinanceStore.getState().syncMessage || 'Done');
     } finally {
       setBusy(false);
     }
   };
 
   const createSheet = async () => {
-    if (!session?.accessToken) {
-      alert('Google required', 'Sign in with Google first.');
-      return;
-    }
-    const name = sheetName.trim() || 'AppCash';
+    if (!(await ensureGoogle())) return;
+    const name = sheetName.trim() || 'AppCash Compras';
     setBusy(true);
     try {
       const id = await createAndLinkSpreadsheet(name);
@@ -59,8 +87,8 @@ export default function AccountSheetsScreen() {
         if (s) setSession(s);
         await refresh();
         alert(
-          'Sheet ready',
-          `"${name}" created with tabs Users, Categories, Fixed, Purchases, Savings plus _sys_ backups.`
+          'Purchase sheet ready',
+          `"${name}" has one tab for purchases (Fecha, Quién, Descripción, Categoría, Monto). Categories and bills stay on this phone.`
         );
       }
     } catch (e) {
@@ -71,10 +99,7 @@ export default function AccountSheetsScreen() {
   };
 
   const linkSheet = async () => {
-    if (!session) {
-      alert('Google required', 'Sign in with Google first.');
-      return;
-    }
+    if (!(await ensureGoogle())) return;
     setBusy(true);
     try {
       const result = await linkSpreadsheetFromInput(sheetInput);
@@ -100,8 +125,31 @@ export default function AccountSheetsScreen() {
 
   const removeSheet = () => {
     confirm(
-      'Remove linked sheet?',
-      'This unlinks Google Sheets and deletes ALL local data on this phone. Your Google file itself is not deleted.',
+      'Unlink purchase sheet?',
+      'Your Google file stays online. App data on this phone is kept. Categories, bills and savings never lived on the Sheet.',
+      async () => {
+        setBusy(true);
+        try {
+          await unlinkSpreadsheet();
+          const s = await loadGoogleSession();
+          setSession(s);
+          setSheetInput('');
+          await refresh();
+          alert('Unlinked', 'Purchase sheet unlinked. Local data is intact.');
+        } catch (e) {
+          alert('Error', e instanceof Error ? e.message : 'Failed');
+        } finally {
+          setBusy(false);
+        }
+      },
+      { confirmLabel: 'Unlink', tone: 'danger', cancelLabel: 'Keep' }
+    );
+  };
+
+  const wipeAll = () => {
+    confirm(
+      'Unlink and wipe phone data?',
+      'This deletes ALL local finance data on this phone. The Google file itself is not deleted.',
       async () => {
         setBusy(true);
         try {
@@ -110,23 +158,23 @@ export default function AccountSheetsScreen() {
           setSession(s);
           setSheetInput('');
           await refresh();
-          alert('Unlinked', 'Sheet unlinked and local data cleared.');
+          alert('Cleared', 'Sheet unlinked and local data wiped.');
         } catch (e) {
           alert('Error', e instanceof Error ? e.message : 'Failed');
         } finally {
           setBusy(false);
         }
       },
-      { confirmLabel: 'Delete all data', tone: 'danger', cancelLabel: 'Keep' }
+      { confirmLabel: 'Wipe phone data', tone: 'danger', cancelLabel: 'Cancel' }
     );
   };
 
   return (
     <Screen tabAware={false}>
       <Text style={styles.lead}>
-        Human tabs: Users, Categories, Fixed, Purchases, Savings. Tabs starting with _sys_
-        are app backups — leave them alone. Sync once to create English tabs if you still see
-        old Spanish names.
+        Optional purchase list for your partner. One sheet tab (Fecha · Quién · Descripción ·
+        Categoría · Monto). They can add rows in Google Sheets; you sync into the app. Categories,
+        fixed bills and savings stay only on this phone.
       </Text>
 
       <GlassPanel style={{ gap: Spacing.sm }}>
@@ -134,11 +182,21 @@ export default function AccountSheetsScreen() {
           <View
             style={[
               styles.dot,
-              { backgroundColor: hasSheet ? Palette.teal : Palette.amber },
+              {
+                backgroundColor: hasSheet
+                  ? Palette.teal
+                  : hasGoogle
+                    ? Palette.amber
+                    : Palette.textDim,
+              },
             ]}
           />
           <Text style={styles.status}>
-            {hasSheet ? 'Sheet linked' : 'No sheet linked'}
+            {hasSheet
+              ? 'Purchase sheet linked'
+              : hasGoogle
+                ? 'Google connected · no sheet yet'
+                : 'Offline · Google not connected'}
             {syncMessage ? ` · ${syncMessage}` : ''}
           </Text>
         </View>
@@ -155,7 +213,7 @@ export default function AccountSheetsScreen() {
         />
 
         <PrimaryButton
-          label={busy ? 'Working…' : hasSheet ? 'Sync now' : 'Link spreadsheet'}
+          label={busy ? 'Working…' : hasSheet ? 'Sync purchases now' : 'Link purchase sheet'}
           onPress={hasSheet ? onSync : linkSheet}
           disabled={busy}
         />
@@ -164,9 +222,10 @@ export default function AccountSheetsScreen() {
           <>
             <PrimaryButton label="Open in Google Sheets" onPress={openSheet} variant="ghost" />
             <PrimaryButton label="Update link from URL" onPress={linkSheet} variant="ghost" />
+            <PrimaryButton label="Unlink sheet (keep phone data)" onPress={removeSheet} variant="ghost" />
             <PrimaryButton
-              label="Remove sheet & wipe data"
-              onPress={removeSheet}
+              label="Unlink & wipe phone data"
+              onPress={wipeAll}
               variant="danger"
             />
           </>
@@ -182,13 +241,13 @@ export default function AccountSheetsScreen() {
             <TextInput
               value={sheetName}
               onChangeText={setSheetName}
-              placeholder="AppCash"
+              placeholder="AppCash Compras"
               placeholderTextColor={Palette.textDim}
               style={styles.input}
               autoCorrect={false}
             />
             <PrimaryButton
-              label={busy ? 'Creating…' : 'Create spreadsheet'}
+              label={busy ? 'Creating…' : 'Create purchase spreadsheet'}
               onPress={createSheet}
               variant="ghost"
               disabled={busy}

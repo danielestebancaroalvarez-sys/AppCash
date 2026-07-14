@@ -30,12 +30,16 @@ import {
   configureGoogleSignIn,
   refreshGoogleAccessToken,
 } from '@/lib/google/auth';
-import { syncNow, ensureSpreadsheet } from '@/lib/sync/engine';
+import { flushPendingPurchasesSync } from '@/lib/sync/engine';
 import { getWeekRange, shiftWeek } from '@/lib/dates';
+
+export const LOCAL_MODE_KEY = 'app_local_mode';
 
 interface FinanceState {
   ready: boolean;
   booting: boolean;
+  /** True when the user chose offline/local mode (Google optional). */
+  localMode: boolean;
   session: GoogleSession | null;
   users: AppUser[];
   activeUserId: string | null;
@@ -53,6 +57,7 @@ interface FinanceState {
   bootstrap: () => Promise<void>;
   refresh: () => Promise<void>;
   setSession: (session: GoogleSession | null) => void;
+  enterLocalMode: (name?: string) => Promise<void>;
   logout: () => Promise<void>;
   setActiveUser: (id: string) => Promise<void>;
   shiftWeekBy: (weeks: number) => void;
@@ -63,6 +68,7 @@ interface FinanceState {
 export const useFinanceStore = create<FinanceState>((set, get) => ({
   ready: false,
   booting: false,
+  localMode: false,
   session: null,
   users: [],
   activeUserId: null,
@@ -83,20 +89,29 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     set({ booting: true });
     await initDatabase();
     configureGoogleSignIn();
-    // Refresh OAuth token on cold start — stored access tokens expire ~1 hour.
+
+    const localMode = (await getSetting(LOCAL_MODE_KEY)) === '1';
     const session =
       (await refreshGoogleAccessToken()) ?? (await loadGoogleSession());
-    if (session) {
-      await ensureHouseholdDefaults(session.name, session.email, session.photoUrl ?? '');
+
+    if (session || localMode) {
+      await ensureHouseholdDefaults(
+        session?.name || 'Me',
+        session?.email || '',
+        session?.photoUrl ?? ''
+      );
     }
+
     const activeUserId = await getSetting('active_user_id');
     const lastSyncAt = await getSetting('last_sync_at');
     set({
       session,
+      localMode: localMode || Boolean(session),
       activeUserId,
       lastSyncAt,
     });
-    if (session) {
+
+    if (session || localMode) {
       await get().refresh();
     }
     set({ ready: true, booting: false });
@@ -104,8 +119,12 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
   refresh: async () => {
     const session = get().session;
-    if (session) {
-      await ensureHouseholdDefaults(session.name, session.email, session.photoUrl ?? '');
+    if (session || get().localMode) {
+      await ensureHouseholdDefaults(
+        session?.name || 'Me',
+        session?.email || '',
+        session?.photoUrl ?? ''
+      );
     }
     const [
       users,
@@ -147,23 +166,24 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     });
   },
 
-  setSession: (session) => set({ session }),
+  setSession: (session) => set({ session, localMode: true }),
+
+  enterLocalMode: async (name = 'Me') => {
+    await ensureHouseholdDefaults(name.trim() || 'Me', '', '');
+    await setSetting(LOCAL_MODE_KEY, '1');
+    set({ localMode: true, session: null });
+    await get().refresh();
+  },
 
   logout: async () => {
+    // Disconnect Google only — keep local finance data and local mode.
     await clearGoogleSession();
+    await setSetting(LOCAL_MODE_KEY, '1');
     set({
       session: null,
-      users: [],
-      transactions: [],
-      fixedItems: [],
-      categories: [],
-      savingsGoals: [],
-      notifications: [],
-      productStats: [],
-      receipts: [],
-      receiptItems: [],
-      ready: true,
+      localMode: true,
     });
+    await get().refresh();
   },
 
   setActiveUser: async (id) => {
@@ -178,16 +198,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   setWeekAnchor: (date) => set({ weekAnchor: date }),
 
   runSync: async () => {
-    if (get().session) {
-      try {
-        const refreshed = await refreshGoogleAccessToken();
-        if (refreshed) set({ session: refreshed });
-        await ensureSpreadsheet();
-      } catch {
-        // spreadsheet creation may fail without network/scopes
-      }
-    }
-    const result = await syncNow({ force: true, push: true, pull: true });
+    // Manual sync resets the pause counter and tries again.
+    const result = await flushPendingPurchasesSync({ force: true });
     const session = await loadGoogleSession();
     set({
       session,
