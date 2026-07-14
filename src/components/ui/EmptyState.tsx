@@ -21,7 +21,14 @@ export function EmptyState({
   return (
     <View style={styles.wrap}>
       {illustration ? (
-        <Image source={illustration} style={styles.illustration} contentFit="contain" transition={180} />
+        <View style={styles.illustrationFrame}>
+          <Image
+            source={illustration}
+            style={styles.illustration}
+            contentFit="cover"
+            transition={180}
+          />
+        </View>
       ) : (
         <Ionicons name={icon} size={28} color={Palette.cyan} />
       )}
@@ -88,10 +95,19 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.md,
   },
-  illustration: {
-    width: 132,
-    height: 132,
+  illustrationFrame: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    overflow: 'hidden',
     marginBottom: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Palette.glassStroke,
+    backgroundColor: Palette.glassFillStrong,
+  },
+  illustration: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     color: Palette.text,
