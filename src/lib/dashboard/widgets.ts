@@ -31,8 +31,8 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
   {
     id: 'period_budget',
     label: 'Period Budget',
-    hint: 'Fixed, variable and savings vs income',
-    defaultOn: false,
+    hint: 'Income vs spend + category weekly caps',
+    defaultOn: true,
   },
   {
     id: 'period_expenses',
@@ -114,10 +114,10 @@ export const HOME_PRIMARY_ORDER: DashboardWidgetId[] = [
   'daily_spend',
   'upcoming_bills',
   'savings_goals',
+  'period_budget',
 ];
 
 export const HOME_SECONDARY_ORDER: DashboardWidgetId[] = [
-  'period_budget',
   'trend',
   'cashflow',
   'market',

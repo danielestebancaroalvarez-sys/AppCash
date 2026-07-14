@@ -17,6 +17,8 @@ import { scheduleFixedItemReminders } from '@/lib/notifications/schedule';
 export default function MoreScreen() {
   const router = useRouter();
   const session = useFinanceStore((s) => s.session);
+  const pendingSyncCount = useFinanceStore((s) => s.pendingSyncCount);
+  const syncPaused = useFinanceStore((s) => s.syncPaused);
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, Dialog } = useAppDialog();
   const { refreshing, onRefresh } = useSheetRefresh();
@@ -100,7 +102,14 @@ export default function MoreScreen() {
           icon="grid-outline"
           iconColor={Palette.mint}
           title="Purchase sheet"
-          subtitle="Optional Compras list your partner can edit"
+          subtitle={
+            syncPaused
+              ? 'Sync paused — tap to retry'
+              : pendingSyncCount > 0
+                ? `${pendingSyncCount} change(s) waiting to sync`
+                : 'Optional Compras list your partner can edit'
+          }
+          badge={pendingSyncCount}
           onPress={() => router.push('/account/sheets' as never)}
         />
         <MenuRow

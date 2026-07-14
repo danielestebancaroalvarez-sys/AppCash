@@ -22,6 +22,7 @@ import { nowIso, todayIsoDate } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
 import { upsertReceipt, upsertTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
+import { tryUploadReceiptPhoto } from '@/lib/google/drive';
 
 /**
  * Manual receipt archive — store / date / total / who / optional photo.
@@ -32,6 +33,7 @@ export default function NewReceiptScreen() {
   const users = useFinanceStore((s) => s.users);
   const categories = useFinanceStore((s) => s.categories);
   const activeUserId = useFinanceStore((s) => s.activeUserId);
+  const session = useFinanceStore((s) => s.session);
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, Dialog } = useAppDialog();
 
@@ -92,6 +94,7 @@ export default function NewReceiptScreen() {
     try {
       const receiptId = createId();
       const savedPhoto = await persistPhoto(receiptId, photoUri);
+      const photoRef = await tryUploadReceiptPhoto(session?.accessToken, savedPhoto, receiptId);
       const grocery =
         categories.find((c) => c.name.toLowerCase() === 'groceries') ??
         categories.find((c) => c.type === 'expense');
@@ -101,7 +104,7 @@ export default function NewReceiptScreen() {
         user_id: userId,
         store: store.trim(),
         total_aud: amount,
-        photo_uri_or_drive_id: savedPhoto,
+        photo_uri_or_drive_id: photoRef || savedPhoto,
         purchased_at: `${dateIso}T12:00:00`,
         raw_gemini_json: note.trim() ? JSON.stringify({ note: note.trim(), manual: true }) : '',
         updated_at: nowIso(),

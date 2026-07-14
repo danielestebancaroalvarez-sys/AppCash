@@ -17,6 +17,7 @@ import {
   upsertTransaction,
 } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
+import { tryUploadReceiptPhoto } from '@/lib/google/drive';
 import { recomputeProductStats } from '@/lib/insights/market';
 import { isReceiptNoiseLine } from '@/lib/purchases/filter';
 
@@ -26,6 +27,7 @@ export default function ReceiptReviewScreen() {
   const users = useFinanceStore((s) => s.users);
   const categories = useFinanceStore((s) => s.categories);
   const activeUserId = useFinanceStore((s) => s.activeUserId);
+  const session = useFinanceStore((s) => s.session);
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, Dialog } = useAppDialog();
 
@@ -58,12 +60,13 @@ export default function ReceiptReviewScreen() {
     const receiptId = createId();
     const dateIso = normalizeReceiptDate(date);
     const productItems = items.filter((item) => !isReceiptNoiseLine(item.name || ''));
+    const photoRef = await tryUploadReceiptPhoto(session?.accessToken, photoUri ?? '', receiptId);
     const receipt = {
       id: receiptId,
       user_id: userId,
       store: store.trim() || 'Store',
       total_aud: parseAmount(total),
-      photo_uri_or_drive_id: photoUri ?? '',
+      photo_uri_or_drive_id: photoRef || photoUri || '',
       purchased_at: `${dateIso}T12:00:00`,
       raw_gemini_json: draft ?? '',
       updated_at: nowIso(),

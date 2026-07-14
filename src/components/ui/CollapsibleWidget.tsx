@@ -1,28 +1,24 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { Palette, Radii, Spacing } from '@/constants/theme';
 
 type Props = {
-  /** Always visible header row content (left side). */
   header: ReactNode;
-  /** Optional actions on the right, before the chevron (edit/delete…). */
   headerActions?: ReactNode;
   children: ReactNode;
-  /** Compact preview under the header when collapsed. */
   collapsedSummary?: ReactNode;
   accent?: string;
   defaultExpanded?: boolean;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   style?: StyleProp<ViewStyle>;
-  /** Extra tap on header (besides toggle). */
   onHeaderPress?: () => void;
+  /** Spoken label for expand control */
+  accessibilityLabel?: string;
 };
 
-/**
- * Shared expand/collapse shell with chevron — used by Savings widgets.
- */
 export function CollapsibleWidget({
   header,
   headerActions,
@@ -34,6 +30,7 @@ export function CollapsibleWidget({
   onExpandedChange,
   style,
   onHeaderPress,
+  accessibilityLabel = 'Expand or collapse section',
 }: Props) {
   const [internal, setInternal] = useState(defaultExpanded);
   const expanded = controlled ?? internal;
@@ -45,7 +42,7 @@ export function CollapsibleWidget({
   };
 
   return (
-    <View style={[styles.shell, { borderColor: `${accent}55` }, style]}>
+    <Animated.View layout={LinearTransition.duration(220)} style={[styles.shell, style]}>
       <View style={[styles.bar, { backgroundColor: accent }]} />
       <View style={styles.body}>
         <View style={styles.headRow}>
@@ -54,6 +51,9 @@ export function CollapsibleWidget({
               onHeaderPress?.();
               toggle();
             }}
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+            accessibilityLabel={accessibilityLabel}
             style={({ pressed }) => [styles.headMain, pressed && { opacity: 0.9 }]}>
             {header}
           </Pressable>
@@ -61,28 +61,38 @@ export function CollapsibleWidget({
           <Pressable
             onPress={toggle}
             hitSlop={8}
-            style={({ pressed }) => [
-              styles.chevronBtn,
-              { backgroundColor: `${accent}18` },
-              pressed && { opacity: 0.85 },
-            ]}>
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Collapse' : 'Expand'}
+            accessibilityState={{ expanded }}
+            style={({ pressed }) => [styles.chevronBtn, pressed && { opacity: 0.75 }]}>
             <Ionicons
               name={expanded ? 'chevron-up' : 'chevron-down'}
-              size={18}
-              color={accent}
+              size={16}
+              color={Palette.textDim}
             />
           </Pressable>
         </View>
 
         {!expanded && collapsedSummary ? (
-          <Pressable onPress={toggle} style={styles.summary}>
+          <Pressable
+            onPress={toggle}
+            style={styles.summary}
+            accessibilityRole="button"
+            accessibilityLabel="Show details">
             {collapsedSummary}
           </Pressable>
         ) : null}
 
-        {expanded ? <View style={styles.content}>{children}</View> : null}
+        {expanded ? (
+          <Animated.View
+            entering={FadeIn.duration(180)}
+            exiting={FadeOut.duration(120)}
+            style={styles.content}>
+            {children}
+          </Animated.View>
+        ) : null}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -90,12 +100,13 @@ const styles = StyleSheet.create({
   shell: {
     flexDirection: 'row',
     backgroundColor: Palette.panel,
-    borderRadius: Radii.xl,
-    borderWidth: 1,
+    borderRadius: Radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Palette.stroke,
     marginBottom: Spacing.sm,
     overflow: 'hidden',
   },
-  bar: { width: 4 },
+  bar: { width: 2 },
   body: { flex: 1, paddingHorizontal: Spacing.md, paddingVertical: 12 },
   headRow: {
     flexDirection: 'row',
@@ -104,9 +115,9 @@ const styles = StyleSheet.create({
   },
   headMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   chevronBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },

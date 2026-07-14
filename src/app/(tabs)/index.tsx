@@ -1,7 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel } from '@/components/ui/Primitives';
+import { EmptyState, SyncBanner } from '@/components/ui/EmptyState';
 import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
 import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
@@ -19,7 +20,8 @@ import { UpcomingBillsWidget } from '@/components/dashboard/UpcomingBillsWidget'
 import { CashflowWidget } from '@/components/dashboard/CashflowWidget';
 import { TopMerchantsWidget } from '@/components/dashboard/TopMerchantsWidget';
 import { GoalsPaceWidget } from '@/components/dashboard/GoalsPaceWidget';
-import { Fonts, Palette, Spacing } from '@/constants/theme';
+import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
+import { Palette, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { usePeriodStats } from '@/hooks/use-period-stats';
 import { useWidgetPrefs } from '@/hooks/use-widget-prefs';
@@ -67,8 +69,12 @@ function renderWidget(id: DashboardWidgetId, stats: ReturnType<typeof usePeriodS
 }
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const syncMessage = useFinanceStore((s) => s.syncMessage);
   const session = useFinanceStore((s) => s.session);
+  const pendingSyncCount = useFinanceStore((s) => s.pendingSyncCount);
+  const syncPaused = useFinanceStore((s) => s.syncPaused);
+  const runSync = useFinanceStore((s) => s.runSync);
   const stats = usePeriodStats();
   const { isEnabled } = useWidgetPrefs();
   const { refreshing, onRefresh } = useSheetRefresh(async () => {
@@ -85,19 +91,38 @@ export default function DashboardScreen() {
       <PeriodSelector />
       <AppBalanceCard stats={stats} />
 
-      {!session?.spreadsheetId ? (
-        <Text style={styles.offlineHint}>
-          Offline ledger · purchase sheet optional (Account → Purchase sheet)
-        </Text>
-      ) : null}
+      <OnboardingChecklist />
+
+      <SyncBanner
+        message={
+          syncPaused
+            ? undefined
+            : session?.spreadsheetId && !pendingSyncCount
+              ? syncMessage || undefined
+              : !session?.spreadsheetId
+                ? 'Offline ledger · purchase sheet optional'
+                : undefined
+        }
+        pendingCount={session?.spreadsheetId ? pendingSyncCount : 0}
+        paused={syncPaused}
+        onPress={
+          session?.spreadsheetId && (pendingSyncCount > 0 || syncPaused)
+            ? () => void runSync()
+            : !session?.spreadsheetId
+              ? () => router.push('/account/sheets' as never)
+              : undefined
+        }
+      />
 
       {emptyPeriod ? (
         <GlassPanel style={styles.emptyPanel}>
-          <Ionicons name="calendar-outline" size={28} color={Palette.cyan} />
-          <Text style={styles.emptyTitle}>No data in this period</Text>
-          <Text style={styles.emptyBody}>
-            Add an expense, income or scan a receipt for {stats.label}, or switch the week above.
-          </Text>
+          <EmptyState
+            icon="calendar-outline"
+            title="No data in this period"
+            body={`Add an expense, income or scan a receipt for ${stats.label}, or switch the week above.`}
+            actionLabel="Add expense"
+            onAction={() => router.push('/(tabs)/add' as never)}
+          />
         </GlassPanel>
       ) : null}
 
@@ -109,6 +134,7 @@ export default function DashboardScreen() {
         <CollapsibleWidget
           accent={Palette.textDim}
           defaultExpanded={false}
+          accessibilityLabel="More insights this period"
           header={
             <WidgetTitle
               icon="layers-outline"
@@ -127,35 +153,14 @@ export default function DashboardScreen() {
         </CollapsibleWidget>
       ) : null}
 
-      {syncMessage ? <Text style={styles.sync}>{syncMessage}</Text> : null}
+      {syncMessage && !pendingSyncCount ? <Text style={styles.sync}>{syncMessage}</Text> : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  offlineHint: {
-    color: Palette.textDim,
-    fontFamily: Fonts.body,
-    fontSize: 12,
-    marginBottom: Spacing.sm,
-  },
   emptyPanel: {
-    alignItems: 'center',
-    gap: Spacing.sm,
     marginBottom: Spacing.md,
-    paddingVertical: Spacing.lg,
-  },
-  emptyTitle: {
-    color: Palette.text,
-    fontFamily: Fonts.display,
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  emptyBody: {
-    color: Palette.textMuted,
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
   },
   moreSummary: { color: Palette.textDim, fontSize: 12 },
   sync: {

@@ -139,9 +139,15 @@ export async function unlinkSpreadsheet(): Promise<void> {
 /** Unlink sheet and wipe local finance data. */
 export async function unlinkSpreadsheetAndWipeLocal(): Promise<void> {
   await unlinkSpreadsheet();
+  await wipeLocalFinanceData();
+}
+
+/** Wipe all local finance data; keep Google session. Seeds a blank household. */
+export async function wipeLocalFinanceData(): Promise<void> {
   const session = await loadGoogleSession();
   await clearFinanceData();
   await ensureHouseholdDefaults(session?.name || 'Me', session?.email || '', session?.photoUrl || '');
+  await setSetting('app_local_mode', '1');
 }
 
 export function getSpreadsheetOpenUrl(spreadsheetId: string): string {
@@ -271,12 +277,41 @@ export async function pullFromSheets(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Push local purchases plus any remote-only rows (spouse race / not yet pulled).
+ * Prefer calling after pullFromSheets so remote edits land in SQLite first.
+ */
 export async function pushPurchasesSnapshot(): Promise<boolean> {
   const access = await getAccess();
   if (!access) return false;
 
   await ensurePurchaseSheet(access.token, access.spreadsheetId);
-  const rows = await buildPurchaseRows();
+
+  const localRows = await buildPurchaseRows();
+  const localById = new Map<string, string[]>();
+  for (const row of localRows) {
+    const id = String(row[5] ?? '').trim();
+    if (id) localById.set(id, row);
+  }
+
+  // Keep remote-only ids so a parallel spouse edit is not wiped if pull missed them.
+  const remoteAll = await batchReadSheets(access.token, access.spreadsheetId, ['Purchases'], true);
+  const remoteParsed = parseCompraRows(remoteAll.Purchases ?? []);
+  for (const r of remoteParsed) {
+    const id = r.id?.trim();
+    if (!id || localById.has(id)) continue;
+    const amount = r.line_total || r.unit_price * (r.qty || 1);
+    localById.set(id, [
+      (r.date || '').slice(0, 10),
+      r.who || '',
+      r.item || '',
+      r.category || '',
+      String(amount || ''),
+      id,
+    ]);
+  }
+
+  const rows = [...localById.values()];
   await batchWriteAllSheets(access.token, access.spreadsheetId, [
     { sheet: 'Purchases', rows },
   ]);
@@ -363,7 +398,7 @@ async function pushPendingChanges(): Promise<void> {
     }
   }
 
-  const result = await syncNow({ force: true, push: true, pull: false });
+  const result = await syncNow({ force: true, push: true, pull: true });
   const stillPending = await listOutbox();
   if (!result.ok || stillPending.length) {
     const next = await bumpAllOutboxAttempts();
@@ -485,7 +520,13 @@ export async function syncNow(opts?: {
     }
 
     try {
+      // Pull first so spouse Compras rows land in SQLite before we rewrite the tab.
+      if (wantPull) {
+        await pullFromSheets();
+      }
+
       const pending = await listOutbox();
+      // After a forced sync (or pending outbox), rewrite Compras from local (+ remote-only merge).
       const shouldPush = wantPush && (force || pending.length > 0);
 
       if (shouldPush) {
@@ -493,10 +534,6 @@ export async function syncNow(opts?: {
         for (const item of pending) {
           await removeOutbox(item.id);
         }
-      }
-
-      if (wantPull) {
-        await pullFromSheets();
       }
 
       lastSyncAtMs = Date.now();

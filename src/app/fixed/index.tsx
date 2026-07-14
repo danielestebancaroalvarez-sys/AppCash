@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton, SectionTitle } from '@/components/ui/Primitives';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { UserName } from '@/components/ui/UserAvatar';
 import { categoryIonicon } from '@/constants/category-icons';
@@ -30,7 +31,18 @@ export default function FixedListScreen() {
     <Screen>
       <PrimaryButton label="Add fixed item" onPress={() => router.push('/fixed/edit' as never)} />
       <SectionTitle title="Active fixed items" subtitle="Auto-debit vs manual + reminders" />
-      {fixedItems.map((item) => {
+      {fixedItems.length === 0 ? (
+        <GlassPanel>
+          <EmptyState
+            icon="calendar-outline"
+            title="No fixed items yet"
+            body="Add rent, salary, or recurring bills. They stay on this phone — not on the purchase sheet."
+            actionLabel="Add fixed item"
+            onAction={() => router.push('/fixed/edit' as never)}
+          />
+        </GlassPanel>
+      ) : (
+        fixedItems.map((item) => {
         const user = users.find((u) => u.id === item.user_id);
         const cat = categories.find((c) => c.id === item.category_id);
         const color = cat?.color || (item.direction === 'in' ? Palette.teal : Palette.coral);
@@ -75,7 +87,8 @@ export default function FixedListScreen() {
             </View>
           </GlassPanel>
         );
-      })}
+      })
+      )}
       {Dialog}
     </Screen>
   );

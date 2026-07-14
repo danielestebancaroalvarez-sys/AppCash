@@ -169,7 +169,12 @@ export async function getOcrSpaceApiKey(): Promise<string> {
 }
 
 export async function setOcrSpaceApiKey(key: string): Promise<void> {
-  await SecureStore.setItemAsync(KEYS.ocrSpace, key.trim());
+  const clean = key.trim();
+  if (!clean) {
+    await SecureStore.deleteItemAsync(KEYS.ocrSpace);
+    return;
+  }
+  await SecureStore.setItemAsync(KEYS.ocrSpace, clean);
 }
 
 function tryRepairTruncatedJson(slice: string): unknown | null {

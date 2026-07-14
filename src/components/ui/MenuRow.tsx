@@ -11,6 +11,8 @@ type Props = {
   onPress?: () => void;
   right?: ReactNode;
   danger?: boolean;
+  /** Small count badge (e.g. pending sync). */
+  badge?: number;
 };
 
 /** Icon + title row used in More / Account menus. */
@@ -22,11 +24,17 @@ export function MenuRow({
   onPress,
   right,
   danger,
+  badge,
 }: Props) {
   const content = (
     <View style={styles.row}>
       <View style={[styles.iconWrap, { backgroundColor: `${iconColor}22` }]}>
         <Ionicons name={icon} size={20} color={danger ? Palette.coral : iconColor} />
+        {badge && badge > 0 ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+          </View>
+        ) : null}
       </View>
       <View style={styles.text}>
         <Text style={[styles.title, danger && { color: Palette.coral }]}>{title}</Text>
@@ -64,7 +72,21 @@ const styles = StyleSheet.create({
     borderRadius: Radii.md,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
   },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Palette.coral,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: Palette.void, fontSize: 9, fontWeight: '800' },
   text: { flex: 1, minWidth: 0 },
   title: {
     color: Palette.text,

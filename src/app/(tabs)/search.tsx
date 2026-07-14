@@ -15,6 +15,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { addWeeks, format } from 'date-fns';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel } from '@/components/ui/Primitives';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
 import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
 import { UserAvatar } from '@/components/ui/UserAvatar';
@@ -414,7 +415,13 @@ export default function SearchScreen() {
 
       {rows.length === 0 ? (
         <GlassPanel>
-          <Text style={styles.empty}>No matching entries.</Text>
+          <EmptyState
+            icon="search-outline"
+            title="No matching entries"
+            body="Try another period, clear filters, or add a purchase from Add."
+            actionLabel="Add"
+            onAction={() => router.push('/(tabs)/add' as never)}
+          />
         </GlassPanel>
       ) : (
         rows.map((t) => {

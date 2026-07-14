@@ -8,9 +8,11 @@ import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import {
   getGeminiApiKey,
   getNvidiaApiKey,
+  getOcrSpaceApiKey,
   getOpenRouterApiKey,
   setGeminiApiKey,
   setNvidiaApiKey,
+  setOcrSpaceApiKey,
   setOpenRouterApiKey,
 } from '@/lib/ai/receipts';
 
@@ -46,12 +48,14 @@ export default function AccountAiScreen() {
   const [openrouter, setOpenrouter] = useState('');
   const [gemini, setGemini] = useState('');
   const [nvidia, setNvidia] = useState('');
+  const [ocrSpace, setOcrSpace] = useState('');
 
   useEffect(() => {
     void (async () => {
       setOpenrouter(await getOpenRouterApiKey());
       setGemini(await getGeminiApiKey());
       setNvidia(await getNvidiaApiKey());
+      setOcrSpace(await getOcrSpaceApiKey());
     })();
   }, []);
 
@@ -59,6 +63,7 @@ export default function AccountAiScreen() {
     await setOpenRouterApiKey(openrouter);
     await setGeminiApiKey(gemini);
     await setNvidiaApiKey(nvidia);
+    await setOcrSpaceApiKey(ocrSpace);
     alert('Saved', 'Receipt scan will try Gemini → NVIDIA → OpenRouter.');
   };
 
@@ -126,6 +131,21 @@ export default function AccountAiScreen() {
           style={styles.input}
         />
 
+        <Text style={styles.keyLabel}>OCR.space (optional)</Text>
+        <Text style={styles.keyHint}>
+          Used only when NVIDIA needs text-from-photo fallback. Leave empty to skip.
+        </Text>
+        <TextInput
+          value={ocrSpace}
+          onChangeText={setOcrSpace}
+          placeholder="OCR.space API key"
+          placeholderTextColor={Palette.textDim}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+        />
+
         <PrimaryButton label="Save AI settings" onPress={saveAi} />
       </GlassPanel>
       {Dialog}
@@ -176,6 +196,7 @@ const styles = StyleSheet.create({
   },
   providerHint: { color: Palette.textDim, fontSize: 12, marginTop: 2 },
   keyLabel: { color: Palette.textMuted, fontSize: 12, fontWeight: '700', marginTop: 4 },
+  keyHint: { color: Palette.textDim, fontSize: 11, lineHeight: 15, marginBottom: 2 },
   input: {
     borderWidth: 1,
     borderColor: Palette.stroke,

@@ -15,7 +15,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { createId } from '@/lib/id';
 import { nowIso } from '@/lib/dates';
 import { deleteUser, upsertUser } from '@/lib/db';
-import { queueMutation } from '@/lib/sync/engine';
+import { queueMutation, wipeLocalFinanceData } from '@/lib/sync/engine';
 import type { AppUser } from '@/types/models';
 
 export default function ProfileScreen() {
@@ -244,6 +244,30 @@ export default function ProfileScreen() {
       })}
 
       <PrimaryButton label="Sign out" variant="danger" onPress={() => setSignOutOpen(true)} />
+
+      <PrimaryButton
+        label="Wipe phone data"
+        variant="ghost"
+        onPress={() =>
+          confirm(
+            'Wipe all phone data?',
+            'Deletes expenses, bills, savings and categories on this phone. Google account stays signed in if connected. This cannot be undone.',
+            async () => {
+              setBusy(true);
+              try {
+                await wipeLocalFinanceData();
+                await refresh();
+                alert('Cleared', 'Local finance data wiped. You can start fresh offline.');
+              } catch (e) {
+                alert('Error', e instanceof Error ? e.message : 'Could not wipe data');
+              } finally {
+                setBusy(false);
+              }
+            },
+            { confirmLabel: 'Wipe everything', tone: 'danger', cancelLabel: 'Cancel' }
+          )
+        }
+      />
 
       <AppModal
         visible={formOpen}

@@ -127,13 +127,17 @@ export async function createSessionFromToken(
 }
 
 /**
- * Google access tokens expire in ~1 hour. The app kept the first login token
- * forever — sync then returns 401. Refresh via Play Services when still signed in.
+ * Google access tokens expire in ~1 hour. Refresh via Play Services when still signed in.
+ * On failure: do NOT keep serving a dead token — clear Google session so the app stays
+ * usable offline and sync asks for re-login.
  */
 export async function refreshGoogleAccessToken(): Promise<GoogleSession | null> {
   const session = await loadGoogleSession();
   if (!session) return null;
   if (!isGoogleConfigured()) return session;
+  if (!session.spreadsheetId) {
+    // Google linked later for sheet — still try refresh if we have a token in use
+  }
 
   configureGoogleSignIn();
 
@@ -143,19 +147,28 @@ export async function refreshGoogleAccessToken(): Promise<GoogleSession | null> 
       try {
         await GoogleSignin.signInSilently();
       } catch {
-        // Not signed in natively — stored token is all we have (likely expired).
-        return session;
+        // Cannot refresh — drop access token so sync fails soft, app keeps localMode
+        await saveGoogleSession({
+          ...session,
+          accessToken: '',
+        });
+        return { ...session, accessToken: '' };
       }
     }
 
     try {
-      await GoogleSignin.clearCachedAccessToken(session.accessToken);
+      if (session.accessToken) {
+        await GoogleSignin.clearCachedAccessToken(session.accessToken);
+      }
     } catch {
-      // ignore — still try getTokens()
+      // ignore
     }
 
     const tokens = await GoogleSignin.getTokens();
-    if (!tokens.accessToken) return session;
+    if (!tokens.accessToken) {
+      await saveGoogleSession({ ...session, accessToken: '' });
+      return { ...session, accessToken: '' };
+    }
 
     const next: GoogleSession = {
       ...session,
@@ -164,7 +177,8 @@ export async function refreshGoogleAccessToken(): Promise<GoogleSession | null> 
     await saveGoogleSession(next);
     return next;
   } catch {
-    return session;
+    await saveGoogleSession({ ...session, accessToken: '' });
+    return { ...session, accessToken: '' };
   }
 }
 

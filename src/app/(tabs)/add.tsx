@@ -25,7 +25,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { createId } from '@/lib/id';
 import { formatDisplayDate, nowIso, todayIsoDate } from '@/lib/dates';
-import { parseAmount } from '@/lib/money';
+import { formatAud, parseAmount } from '@/lib/money';
 import { upsertTransaction } from '@/lib/db';
 import { queueMutation } from '@/lib/sync/engine';
 import { parseReceiptImage, type ReceiptScanProgress } from '@/lib/ai/receipts';
@@ -83,6 +83,7 @@ export default function AddScreen() {
   const [scanProgress, setScanProgress] = useState<ReceiptScanProgress | null>(null);
   const [txDate, setTxDate] = useState(todayIsoDate());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [splitHalf, setSplitHalf] = useState(false);
 
   const modeMeta = MODES.find((m) => m.id === mode)!;
 
@@ -150,6 +151,40 @@ export default function AddScreen() {
     const dateIso = txDate > today ? today : txDate || today;
 
     const type: TransactionType = mode === 'income' ? 'income_sporadic' : 'expense_sporadic';
+    const partner =
+      mode === 'expense' && splitHalf
+        ? users.find((u) => u.id !== effectiveUser) ?? null
+        : null;
+
+    if (partner && mode === 'expense') {
+      const half = Math.round((value / 2) * 100) / 100;
+      const rest = Math.round((value - half) * 100) / 100;
+      const base = {
+        type,
+        category_id: effectiveCategory,
+        date: dateIso,
+        note: note ? `${note} (split 50/50)` : 'Split 50/50',
+        merchant,
+        receipt_id: '',
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      };
+      const a = { ...base, id: createId(), user_id: effectiveUser, amount_aud: half };
+      const b = { ...base, id: createId(), user_id: partner.id, amount_aud: rest };
+      await upsertTransaction(a);
+      await upsertTransaction(b);
+      await queueMutation('transactions', a);
+      await queueMutation('transactions', b);
+      await refresh();
+      setAmount('');
+      setNote('');
+      setMerchant('');
+      setTxDate(todayIsoDate());
+      setSplitHalf(false);
+      alert('Saved', `Split ${formatAud(value)} → you ${formatAud(half)} · ${partner.name} ${formatAud(rest)}`);
+      return;
+    }
+
     const tx = {
       id: createId(),
       user_id: effectiveUser,
@@ -406,6 +441,26 @@ export default function AddScreen() {
             </ScrollView>
             )}
           </Section>
+
+          {mode === 'expense' && users.length >= 2 ? (
+            <Pressable
+              onPress={() => setSplitHalf((v) => !v)}
+              style={[styles.splitRow, splitHalf && styles.splitRowOn]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: splitHalf }}>
+              <Ionicons
+                name={splitHalf ? 'checkbox' : 'square-outline'}
+                size={20}
+                color={splitHalf ? Palette.cyan : Palette.textDim}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.splitTitle}>Split 50/50 with partner</Text>
+                <Text style={styles.splitHint}>
+                  Creates two half expenses for you and the other profile
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
 
           <Section
             accent={Palette.teal}
@@ -689,6 +744,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   dateHint: { color: Palette.cyan, fontSize: 12 },
+  splitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    borderColor: Palette.stroke,
+    backgroundColor: Palette.panel,
+    marginBottom: 12,
+  },
+  splitRowOn: {
+    borderColor: Palette.cyan,
+    backgroundColor: 'rgba(61,231,255,0.08)',
+  },
+  splitTitle: { color: Palette.text, fontWeight: '700', fontSize: 14 },
+  splitHint: { color: Palette.textDim, fontSize: 11, marginTop: 2 },
   link: { fontSize: 12, fontWeight: '700' },
   input: {
     borderWidth: 1,

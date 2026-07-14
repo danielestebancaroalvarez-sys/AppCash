@@ -42,6 +42,7 @@ function HeaderProfileButton() {
 export default function TabsLayout() {
   const router = useRouter();
   const { tabBarHeight, bottomInset } = useTabBarHeight();
+  const pendingSyncCount = useFinanceStore((s) => s.pendingSyncCount);
 
   return (
     <Tabs
@@ -109,6 +110,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: 'More',
+          tabBarBadge: pendingSyncCount > 0 ? pendingSyncCount : undefined,
           tabBarIcon: ({ focused }) => <TabIcon name="menu-outline" focused={focused} />,
         }}
       />

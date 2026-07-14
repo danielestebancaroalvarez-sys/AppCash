@@ -11,8 +11,11 @@ import type {
   SavingsGoal,
   Transaction,
 } from '@/types/models';
-import { initDatabase, getSetting, setSetting } from '@/lib/db';
 import {
+  initDatabase,
+  getSetting,
+  setSetting,
+  listOutbox,
   listCategories,
   listFixedItems,
   listNotifications,
@@ -30,7 +33,7 @@ import {
   configureGoogleSignIn,
   refreshGoogleAccessToken,
 } from '@/lib/google/auth';
-import { flushPendingPurchasesSync } from '@/lib/sync/engine';
+import { flushPendingPurchasesSync, getPurchaseSyncRetryPolicy } from '@/lib/sync/engine';
 import { getWeekRange, shiftWeek } from '@/lib/dates';
 
 export const LOCAL_MODE_KEY = 'app_local_mode';
@@ -54,6 +57,10 @@ interface FinanceState {
   weekAnchor: Date;
   syncMessage: string;
   lastSyncAt: string | null;
+  /** Local purchase changes waiting to push. */
+  pendingSyncCount: number;
+  /** Auto retries exhausted until manual Sync / foreground. */
+  syncPaused: boolean;
   bootstrap: () => Promise<void>;
   refresh: () => Promise<void>;
   setSession: (session: GoogleSession | null) => void;
@@ -83,6 +90,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   weekAnchor: new Date(),
   syncMessage: '',
   lastSyncAt: null,
+  pendingSyncCount: 0,
+  syncPaused: false,
 
   bootstrap: async () => {
     if (get().booting) return;
@@ -138,6 +147,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       productStats,
       activeUserId,
       lastSyncAt,
+      outbox,
     ] = await Promise.all([
       listUsers(),
       listCategories(),
@@ -150,7 +160,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       listProductStats(),
       getSetting('active_user_id'),
       getSetting('last_sync_at'),
+      listOutbox(),
     ]);
+    const maxAttempts = getPurchaseSyncRetryPolicy().maxAttempts;
+    const attempts = outbox.length ? Math.max(...outbox.map((o) => o.attempts)) : 0;
     set({
       users,
       categories,
@@ -163,6 +176,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       productStats,
       activeUserId: activeUserId ?? users[0]?.id ?? null,
       lastSyncAt,
+      pendingSyncCount: outbox.length,
+      syncPaused: outbox.length > 0 && attempts >= maxAttempts,
     });
   },
 
@@ -205,6 +220,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       session,
       syncMessage: result.message,
       lastSyncAt: new Date().toISOString(),
+      syncPaused: Boolean(result.paused),
     });
     await get().refresh();
   },
