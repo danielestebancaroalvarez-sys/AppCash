@@ -492,6 +492,49 @@ export default function AddScreen() {
             ) : null}
           </Section>
 
+          <Section
+            accent="#5B8CFF"
+            icon="scan-outline"
+            title="Receipt photo"
+            hint={
+              mode === 'expense'
+                ? 'Optional — AI can fill amount, store and line items'
+                : 'Optional — scan a payslip or deposit slip'
+            }>
+            <View style={styles.receiptInlineRow}>
+              <Pressable
+                disabled={busy}
+                onPress={() => scanReceipt(true)}
+                style={({ pressed }) => [
+                  styles.receiptInlineBtn,
+                  (pressed || busy) && { opacity: 0.85 },
+                ]}>
+                <Ionicons name="camera-outline" size={18} color="#5B8CFF" />
+                <Text style={styles.receiptInlineLabel}>
+                  {analyzing ? 'Reading…' : 'Camera'}
+                </Text>
+              </Pressable>
+              <Pressable
+                disabled={busy}
+                onPress={() => scanReceipt(false)}
+                style={({ pressed }) => [
+                  styles.receiptInlineBtn,
+                  (pressed || busy) && { opacity: 0.85 },
+                ]}>
+                <Ionicons name="images-outline" size={18} color="#5B8CFF" />
+                <Text style={styles.receiptInlineLabel}>
+                  {analyzing ? 'Reading…' : 'Gallery'}
+                </Text>
+              </Pressable>
+            </View>
+            <Pressable
+              onPress={() => router.push('/receipts' as never)}
+              style={styles.viewReceipts}>
+              <Ionicons name="folder-open-outline" size={16} color={Palette.cyan} />
+              <Text style={styles.viewReceiptsText}>View saved receipts</Text>
+            </Pressable>
+          </Section>
+
           <Pressable
             onPress={saveQuick}
             style={({ pressed }) => [
@@ -926,5 +969,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     paddingHorizontal: Spacing.sm,
+  },
+  receiptInlineRow: { flexDirection: 'row', gap: 10 },
+  receiptInlineBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: Radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(91,140,255,0.45)',
+    backgroundColor: 'rgba(91,140,255,0.12)',
+  },
+  receiptInlineLabel: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '700',
+    fontSize: 13,
   },
 });
