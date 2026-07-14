@@ -12,9 +12,8 @@ import type {
 } from '@/types/models';
 
 /**
- * Human sheets historically included Users/Categories/Fixed/Savings.
- * Sync now only writes Purchases — a spouse-friendly purchase list.
- * Other tab names remain for legacy read compatibility only.
+ * Human sheets (edit these freely in Google Sheets).
+ * System sheets (prefixed _sys_) store app internals — leave alone unless debugging.
  */
 export const HUMAN_SHEETS = [
   'Users',
@@ -34,8 +33,11 @@ export const SYSTEM_SHEETS = [
 
 export const SHEET_NAMES = [...HUMAN_SHEETS, ...SYSTEM_SHEETS] as const;
 
-/** Only this tab is created/updated by sync (app is source of truth for the rest). */
-export const SYNC_SHEETS = ['Purchases'] as const;
+/**
+ * Tabs created and written by sync.
+ * Receipts / market / notifications stay on the phone — no `_sys_*` clutter in the workbook.
+ */
+export const SYNC_SHEETS = [...HUMAN_SHEETS] as const;
 export type SyncSheetName = (typeof SYNC_SHEETS)[number];
 
 /** Old Spanish tab titles — still readable on pull. */
@@ -73,12 +75,16 @@ export const SHEET_HEADERS: Record<SheetName, string[]> = {
     'next_due',
   ],
   Purchases: [
-    'Fecha',
-    'Quién',
-    'Descripción',
-    'Categoría',
-    'Monto',
     'id',
+    'date',
+    'time',
+    'who',
+    'category',
+    'item',
+    'qty',
+    'unit_price',
+    'line_total',
+    'type',
   ],
   Savings: [
     'id',
@@ -150,9 +156,11 @@ export type PurchaseRow = {
   qty: number;
   unit_price: number;
   line_total: number;
+  /** income | expense | variable — empty defaults to expense */
+  type: string;
 };
 
-/** Spouse-friendly row for Purchases tab (one purchase = one row). */
+/** @deprecated Prefer PurchaseRow */
 export type PurchaseSheetRow = {
   Fecha: string;
   Quién: string;
@@ -248,20 +256,20 @@ async function sheetsFetch(accessToken: string, path: string, init?: RequestInit
   return res.json();
 }
 
-export async function createAppSpreadsheet(accessToken: string, title = 'AppCash Compras'): Promise<string> {
+export async function createAppSpreadsheet(accessToken: string, title = 'AppCash'): Promise<string> {
   const data = await sheetsFetch(accessToken, '', {
     method: 'POST',
     body: JSON.stringify({
       properties: { title },
-      sheets: [{ properties: { title: 'Purchases' } }],
+      sheets: HUMAN_SHEETS.map((titleName) => ({ properties: { title: titleName } })),
     }),
   });
   const spreadsheetId = data.spreadsheetId as string;
-  await ensurePurchaseSheet(accessToken, spreadsheetId);
+  await ensureHeaders(accessToken, spreadsheetId);
   return spreadsheetId;
 }
 
-/** Ensure Purchases (or legacy Compras) exists with spouse-friendly headers. Does not create system tabs. */
+/** Ensure Purchases (or legacy Compras) exists — used when reading mixed workbooks. */
 export async function resolvePurchaseTabName(
   accessToken: string,
   spreadsheetId: string
@@ -286,35 +294,100 @@ export async function resolvePurchaseTabName(
   return 'Purchases';
 }
 
-export async function ensurePurchaseSheet(
+/** Hide legacy `_sys_*` tabs so only the five human ledger sheets stay visible. */
+export async function hideSystemSheets(
   accessToken: string,
   spreadsheetId: string
 ): Promise<void> {
-  const tab = await resolvePurchaseTabName(accessToken, spreadsheetId);
-  const existing = await batchReadSheets(accessToken, spreadsheetId, ['Purchases'], true);
-  const values = existing.Purchases ?? [];
-  if (!values.length) {
-    await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchUpdate`, {
-      method: 'POST',
-      body: JSON.stringify({
-        valueInputOption: 'RAW',
-        data: [{ range: `${tab}!A1`, values: [SHEET_HEADERS.Purchases] }],
-      }),
-    });
+  const meta = await sheetsFetch(
+    accessToken,
+    `/${spreadsheetId}?fields=sheets.properties(sheetId,title,hidden)`
+  );
+  const sheets =
+    (meta.sheets as Array<{
+      properties?: { sheetId?: number; title?: string; hidden?: boolean };
+    }>) ?? [];
+  const requests = [];
+  for (const s of sheets) {
+    const title = s.properties?.title ?? '';
+    const sheetId = s.properties?.sheetId;
+    if (sheetId == null) continue;
+    const isSys =
+      title.startsWith('_sys_') ||
+      SYSTEM_SHEETS.includes(title as (typeof SYSTEM_SHEETS)[number]) ||
+      (LEGACY_SHEET_ALIASES._sys_receipts ?? []).includes(title) ||
+      (LEGACY_SHEET_ALIASES._sys_receipt_items ?? []).includes(title) ||
+      (LEGACY_SHEET_ALIASES._sys_notifications ?? []).includes(title) ||
+      (LEGACY_SHEET_ALIASES._sys_market ?? []).includes(title) ||
+      (LEGACY_SHEET_ALIASES._sys_config ?? []).includes(title);
+    if (isSys && !s.properties?.hidden) {
+      requests.push({
+        updateSheetProperties: {
+          properties: { sheetId, hidden: true },
+          fields: 'hidden',
+        },
+      });
+    }
   }
+  if (!requests.length) return;
+  await sheetsFetch(accessToken, `/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests }),
+  });
 }
 
-/** @deprecated Prefer ensurePurchaseSheet — kept so call sites compile during migration. */
 export async function ensureWorkbookStructure(
   accessToken: string,
   spreadsheetId: string
 ): Promise<void> {
-  await ensurePurchaseSheet(accessToken, spreadsheetId);
+  const meta = await sheetsFetch(
+    accessToken,
+    `/${spreadsheetId}?fields=sheets.properties.title`
+  );
+  const titles = new Set(
+    ((meta.sheets as Array<{ properties?: { title?: string } }>) ?? []).map(
+      (s) => s.properties?.title ?? ''
+    )
+  );
+  const requests = HUMAN_SHEETS.filter((name) => !titles.has(name)).map((title) => ({
+    addSheet: { properties: { title } },
+  }));
+  if (requests.length) {
+    await sheetsFetch(accessToken, `/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({ requests }),
+    });
+  }
+  await ensureHeaders(accessToken, spreadsheetId);
+  try {
+    await hideSystemSheets(accessToken, spreadsheetId);
+  } catch {
+    // hide is best-effort — sync still works if sheets stay visible
+  }
 }
 
-/** @deprecated Prefer ensurePurchaseSheet */
 export async function ensureHeaders(accessToken: string, spreadsheetId: string): Promise<void> {
-  await ensurePurchaseSheet(accessToken, spreadsheetId);
+  const existing = await batchReadSheets(accessToken, spreadsheetId, [...HUMAN_SHEETS], false);
+  const data = [];
+  for (const name of HUMAN_SHEETS) {
+    const values = existing[name] ?? [];
+    if (!values.length) {
+      data.push({ range: `${name}!A1`, values: [SHEET_HEADERS[name]] });
+    }
+  }
+  if (!data.length) return;
+  await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ valueInputOption: 'RAW', data }),
+  });
+}
+
+/** @deprecated Prefer ensureWorkbookStructure */
+export async function ensurePurchaseSheet(
+  accessToken: string,
+  spreadsheetId: string
+): Promise<void> {
+  await ensureWorkbookStructure(accessToken, spreadsheetId);
 }
 
 /**
@@ -375,31 +448,21 @@ export async function batchWriteAllSheets(
 ): Promise<void> {
   if (!sheets.length) return;
 
-  const ranges: string[] = [];
-  const data: Array<{ range: string; values: string[][] }> = [];
-
-  for (const { sheet, rows } of sheets) {
-    const tab =
-      sheet === 'Purchases'
-        ? await resolvePurchaseTabName(accessToken, spreadsheetId)
-        : sheet;
-    ranges.push(`${tab}!A:Z`);
-    data.push({
-      range: `${tab}!A1`,
-      values: [SHEET_HEADERS[sheet], ...rows],
-    });
-  }
-
   await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchClear`, {
     method: 'POST',
-    body: JSON.stringify({ ranges }),
+    body: JSON.stringify({
+      ranges: sheets.map((s) => `${s.sheet}!A:Z`),
+    }),
   });
 
   await sheetsFetch(accessToken, `/${spreadsheetId}/values:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({
       valueInputOption: 'RAW',
-      data,
+      data: sheets.map(({ sheet, rows }) => ({
+        range: `${sheet}!A1`,
+        values: [SHEET_HEADERS[sheet], ...rows],
+      })),
     }),
   });
 }
@@ -513,7 +576,6 @@ export function parseCompraRows(values: string[][]): PurchaseRow[] {
       o.descripcion ||
       o.description ||
       o.item ||
-      o.tipo ||
       o.name ||
       '';
     const total =
@@ -535,6 +597,7 @@ export function parseCompraRows(values: string[][]): PurchaseRow[] {
       qty,
       unit_price: unit,
       line_total: total || unit * qty,
+      type: o.type || o.tipo || '',
     };
   });
 }

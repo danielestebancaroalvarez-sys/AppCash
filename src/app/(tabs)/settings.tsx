@@ -107,7 +107,7 @@ export default function MoreScreen() {
               ? 'Sync paused — tap to retry'
               : pendingSyncCount > 0
                 ? `${pendingSyncCount} change(s) waiting to sync`
-                : 'Optional Compras list your partner can edit'
+                : 'Optional Google Sheet for Fixed, Savings & purchases'
           }
           badge={pendingSyncCount}
           onPress={() => router.push('/account/sheets' as never)}

@@ -147,7 +147,10 @@ export async function setGeminiApiKey(key: string): Promise<void> {
 
 export async function getNvidiaApiKey(): Promise<string> {
   return sanitizeApiKey(
-    (await SecureStore.getItemAsync(KEYS.nvidia)) || process.env.EXPO_PUBLIC_NVIDIA_API_KEY || ''
+    (await SecureStore.getItemAsync(KEYS.nvidia)) ||
+      process.env.EXPO_PUBLIC_NVIDIA_API_KEY ||
+      process.env.EXPO_PUBLIC_NVAPI_API_KEY ||
+      ''
   );
 }
 

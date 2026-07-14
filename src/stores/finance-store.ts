@@ -191,14 +191,16 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
 
   logout: async () => {
-    // Disconnect Google only — keep local finance data and local mode.
+    // Leave the app entry — clear Google and local mode so AuthGate shows login.
     await clearGoogleSession();
-    await setSetting(LOCAL_MODE_KEY, '1');
+    await setSetting(LOCAL_MODE_KEY, '0');
     set({
       session: null,
-      localMode: true,
+      localMode: false,
+      syncMessage: '',
+      pendingSyncCount: 0,
+      syncPaused: false,
     });
-    await get().refresh();
   },
 
   setActiveUser: async (id) => {

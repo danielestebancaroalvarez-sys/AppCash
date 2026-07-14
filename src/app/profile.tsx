@@ -187,8 +187,8 @@ export default function ProfileScreen() {
           title="Purchase sheet"
           subtitle={
             session?.spreadsheetId
-              ? 'Sync Compras list with your partner'
-              : 'Optional Google Sheet for purchases only'
+              ? 'Sync Fixed, Savings, Purchases & more'
+              : 'Optional Google Sheet ledger backup'
           }
           onPress={() => router.push('/account/sheets' as never)}
         />
@@ -300,9 +300,9 @@ export default function ProfileScreen() {
       <AppModal
         visible={signOutOpen}
         title="Sign out?"
-        message="Disconnects Google. Your finances stay on this phone. You can keep using AppCash offline and link a purchase sheet again later."
-        confirmLabel={busy ? 'Signing out…' : 'Disconnect Google'}
-        cancelLabel="Stay connected"
+        message="Disconnects Google and returns to the login screen. Finance data already saved on this phone stays until you wipe it."
+        confirmLabel={busy ? 'Signing out…' : 'Sign out'}
+        cancelLabel="Stay"
         tone="danger"
         confirmDisabled={busy}
         onCancel={() => setSignOutOpen(false)}

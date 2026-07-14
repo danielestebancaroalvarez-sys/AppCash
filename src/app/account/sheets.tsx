@@ -24,7 +24,7 @@ export default function AccountSheetsScreen() {
   const { alert, confirm, Dialog } = useAppDialog();
 
   const [sheetInput, setSheetInput] = useState(session?.spreadsheetId ?? '');
-  const [sheetName, setSheetName] = useState('AppCash Compras');
+  const [sheetName, setSheetName] = useState('AppCash');
   const [busy, setBusy] = useState(false);
   const hasSheet = Boolean(session?.spreadsheetId);
   const hasGoogle = Boolean(session?.accessToken);
@@ -77,7 +77,7 @@ export default function AccountSheetsScreen() {
 
   const createSheet = async () => {
     if (!(await ensureGoogle())) return;
-    const name = sheetName.trim() || 'AppCash Compras';
+    const name = sheetName.trim() || 'AppCash';
     setBusy(true);
     try {
       const id = await createAndLinkSpreadsheet(name);
@@ -87,8 +87,8 @@ export default function AccountSheetsScreen() {
         if (s) setSession(s);
         await refresh();
         alert(
-          'Purchase sheet ready',
-          `"${name}" has one tab for purchases (Fecha, Quién, Descripción, Categoría, Monto). Categories and bills stay on this phone.`
+          'Spreadsheet ready',
+          `"${name}" has 5 tabs: Users, Categories, Fixed, Purchases, Savings. Receipt photos and market data stay on this phone.`
         );
       }
     } catch (e) {
@@ -172,9 +172,9 @@ export default function AccountSheetsScreen() {
   return (
     <Screen tabAware={false}>
       <Text style={styles.lead}>
-        Optional purchase list for your partner. One sheet tab (Fecha · Quién · Descripción ·
-        Categoría · Monto). They can add rows in Google Sheets; you sync into the app. Categories,
-        fixed bills and savings stay only on this phone.
+        Optional Google backup for the household ledger. Sync keeps five visible tabs: Users,
+        Categories, Fixed, Purchases and Savings. Receipt photos and market data stay on the phone
+        (legacy `_sys_*` tabs are hidden if they already exist).
       </Text>
 
       <GlassPanel style={{ gap: Spacing.sm }}>
@@ -193,7 +193,7 @@ export default function AccountSheetsScreen() {
           />
           <Text style={styles.status}>
             {hasSheet
-              ? 'Purchase sheet linked'
+              ? 'Spreadsheet linked'
               : hasGoogle
                 ? 'Google connected · no sheet yet'
                 : 'Offline · Google not connected'}
@@ -213,7 +213,7 @@ export default function AccountSheetsScreen() {
         />
 
         <PrimaryButton
-          label={busy ? 'Working…' : hasSheet ? 'Sync purchases now' : 'Link purchase sheet'}
+          label={busy ? 'Working…' : hasSheet ? 'Sync now' : 'Link spreadsheet'}
           onPress={hasSheet ? onSync : linkSheet}
           disabled={busy}
         />
@@ -241,7 +241,7 @@ export default function AccountSheetsScreen() {
             <TextInput
               value={sheetName}
               onChangeText={setSheetName}
-              placeholder="AppCash Compras"
+              placeholder="AppCash"
               placeholderTextColor={Palette.textDim}
               style={styles.input}
               autoCorrect={false}

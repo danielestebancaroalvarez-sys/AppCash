@@ -21,7 +21,7 @@ const CASCADE = [
     id: 'gemini' as const,
     step: '1',
     label: 'Gemini',
-    hint: 'Tried first — aistudio.google.com/apikey',
+    hint: 'Tried first',
     icon: 'sparkles-outline' as const,
     color: Palette.amber,
   },
@@ -29,7 +29,7 @@ const CASCADE = [
     id: 'nvidia' as const,
     step: '2',
     label: 'NVIDIA',
-    hint: 'If Gemini fails — build.nvidia.com',
+    hint: 'If Gemini fails',
     icon: 'hardware-chip-outline' as const,
     color: Palette.teal,
   },
@@ -37,7 +37,7 @@ const CASCADE = [
     id: 'openrouter' as const,
     step: '3',
     label: 'OpenRouter',
-    hint: 'Last resort — openrouter.ai',
+    hint: 'Last resort',
     icon: 'planet-outline' as const,
     color: Palette.cyan,
   },
@@ -45,6 +45,7 @@ const CASCADE = [
 
 export default function AccountAiScreen() {
   const { alert, Dialog } = useAppDialog();
+  const [ready, setReady] = useState({ gemini: false, nvidia: false, openrouter: false, ocr: false });
   const [openrouter, setOpenrouter] = useState('');
   const [gemini, setGemini] = useState('');
   const [nvidia, setNvidia] = useState('');
@@ -52,54 +53,91 @@ export default function AccountAiScreen() {
 
   useEffect(() => {
     void (async () => {
-      setOpenrouter(await getOpenRouterApiKey());
-      setGemini(await getGeminiApiKey());
-      setNvidia(await getNvidiaApiKey());
-      setOcrSpace(await getOcrSpaceApiKey());
+      const [g, n, o, ocr] = await Promise.all([
+        getGeminiApiKey(),
+        getNvidiaApiKey(),
+        getOpenRouterApiKey(),
+        getOcrSpaceApiKey(),
+      ]);
+      setReady({
+        gemini: Boolean(g),
+        nvidia: Boolean(n),
+        openrouter: Boolean(o),
+        ocr: Boolean(ocr),
+      });
+      // Leave override fields empty — scan already uses .env / SecureStore defaults.
     })();
   }, []);
 
   const saveAi = async () => {
-    await setOpenRouterApiKey(openrouter);
-    await setGeminiApiKey(gemini);
-    await setNvidiaApiKey(nvidia);
-    await setOcrSpaceApiKey(ocrSpace);
-    alert('Saved', 'Receipt scan will try Gemini → NVIDIA → OpenRouter.');
+    if (gemini.trim()) await setGeminiApiKey(gemini);
+    if (nvidia.trim()) await setNvidiaApiKey(nvidia);
+    if (openrouter.trim()) await setOpenRouterApiKey(openrouter);
+    if (ocrSpace.trim()) await setOcrSpaceApiKey(ocrSpace);
+    const [g, n, o, ocr] = await Promise.all([
+      getGeminiApiKey(),
+      getNvidiaApiKey(),
+      getOpenRouterApiKey(),
+      getOcrSpaceApiKey(),
+    ]);
+    setReady({
+      gemini: Boolean(g),
+      nvidia: Boolean(n),
+      openrouter: Boolean(o),
+      ocr: Boolean(ocr),
+    });
+    setGemini('');
+    setNvidia('');
+    setOpenrouter('');
+    setOcrSpace('');
+    alert('Saved', 'Overrides applied. Empty fields keep the built-in defaults.');
   };
 
   return (
     <Screen tabAware={false}>
       <Text style={styles.lead}>
-        Keys stay on this phone. Scan always tries Gemini first, then NVIDIA, then OpenRouter —
-        and within each, the next model if one fails.
+        Receipt scan already uses the API keys built into the app (Gemini → NVIDIA → OpenRouter). You
+        do not need to type them. Optional fields below only override the defaults.
       </Text>
 
       <Text style={styles.section}>Fallback order</Text>
       <View style={styles.providerGrid}>
-        {CASCADE.map((p) => (
-          <View key={p.id} style={[styles.providerCard, { borderColor: `${p.color}66` }]}>
-            <View style={[styles.stepBadge, { backgroundColor: `${p.color}22` }]}>
-              <Text style={[styles.stepText, { color: p.color }]}>{p.step}</Text>
+        {CASCADE.map((p) => {
+          const ok =
+            p.id === 'gemini' ? ready.gemini : p.id === 'nvidia' ? ready.nvidia : ready.openrouter;
+          return (
+            <View key={p.id} style={[styles.providerCard, { borderColor: `${p.color}66` }]}>
+              <View style={[styles.stepBadge, { backgroundColor: `${p.color}22` }]}>
+                <Text style={[styles.stepText, { color: p.color }]}>{p.step}</Text>
+              </View>
+              <View style={[styles.providerIcon, { backgroundColor: `${p.color}22` }]}>
+                <Ionicons name={p.icon} size={20} color={p.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.providerLabel}>{p.label}</Text>
+                <Text style={styles.providerHint}>
+                  {p.hint} · {ok ? 'default ready' : 'not configured'}
+                </Text>
+              </View>
+              <Ionicons
+                name={ok ? 'checkmark-circle' : 'alert-circle-outline'}
+                size={18}
+                color={ok ? Palette.teal : Palette.amber}
+              />
             </View>
-            <View style={[styles.providerIcon, { backgroundColor: `${p.color}22` }]}>
-              <Ionicons name={p.icon} size={20} color={p.color} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.providerLabel}>{p.label}</Text>
-              <Text style={styles.providerHint}>{p.hint}</Text>
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       <GlassPanel style={{ gap: Spacing.sm, marginTop: Spacing.md }}>
-        <Text style={styles.section}>API keys</Text>
+        <Text style={styles.section}>Optional overrides</Text>
+        <Text style={styles.keyHint}>Leave blank to keep built-in defaults. Paste only to replace.</Text>
 
-        <Text style={styles.keyLabel}>Gemini</Text>
+        <Text style={styles.keyLabel}>Gemini override</Text>
         <TextInput
           value={gemini}
           onChangeText={setGemini}
-          placeholder="AIza… (Google AI Studio)"
+          placeholder={ready.gemini ? 'Using built-in default' : 'AIza…'}
           placeholderTextColor={Palette.textDim}
           secureTextEntry
           autoCapitalize="none"
@@ -107,11 +145,11 @@ export default function AccountAiScreen() {
           style={styles.input}
         />
 
-        <Text style={styles.keyLabel}>NVIDIA</Text>
+        <Text style={styles.keyLabel}>NVIDIA override</Text>
         <TextInput
           value={nvidia}
           onChangeText={setNvidia}
-          placeholder="nvapi-…"
+          placeholder={ready.nvidia ? 'Using built-in default' : 'nvapi-…'}
           placeholderTextColor={Palette.textDim}
           secureTextEntry
           autoCapitalize="none"
@@ -119,11 +157,11 @@ export default function AccountAiScreen() {
           style={styles.input}
         />
 
-        <Text style={styles.keyLabel}>OpenRouter</Text>
+        <Text style={styles.keyLabel}>OpenRouter override</Text>
         <TextInput
           value={openrouter}
           onChangeText={setOpenrouter}
-          placeholder="sk-or-…"
+          placeholder={ready.openrouter ? 'Using built-in default' : 'sk-or-…'}
           placeholderTextColor={Palette.textDim}
           secureTextEntry
           autoCapitalize="none"
@@ -132,13 +170,10 @@ export default function AccountAiScreen() {
         />
 
         <Text style={styles.keyLabel}>OCR.space (optional)</Text>
-        <Text style={styles.keyHint}>
-          Used only when NVIDIA needs text-from-photo fallback. Leave empty to skip.
-        </Text>
         <TextInput
           value={ocrSpace}
           onChangeText={setOcrSpace}
-          placeholder="OCR.space API key"
+          placeholder={ready.ocr ? 'Using saved / default key' : 'Only if NVIDIA needs text OCR'}
           placeholderTextColor={Palette.textDim}
           secureTextEntry
           autoCapitalize="none"
@@ -146,7 +181,7 @@ export default function AccountAiScreen() {
           style={styles.input}
         />
 
-        <PrimaryButton label="Save AI settings" onPress={saveAi} />
+        <PrimaryButton label="Save overrides" onPress={saveAi} />
       </GlassPanel>
       {Dialog}
     </Screen>

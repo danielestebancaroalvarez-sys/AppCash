@@ -100,7 +100,7 @@ export default function DashboardScreen() {
             : session?.spreadsheetId && !pendingSyncCount
               ? syncMessage || undefined
               : !session?.spreadsheetId
-                ? 'Offline ledger · purchase sheet optional'
+                ? 'Offline ledger · Google Sheet optional'
                 : undefined
         }
         pendingCount={session?.spreadsheetId ? pendingSyncCount : 0}
