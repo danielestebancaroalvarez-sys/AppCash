@@ -28,6 +28,7 @@ import {
   loadGoogleSession,
   clearGoogleSession,
   configureGoogleSignIn,
+  refreshGoogleAccessToken,
 } from '@/lib/google/auth';
 import { syncNow, ensureSpreadsheet } from '@/lib/sync/engine';
 import { getWeekRange, shiftWeek } from '@/lib/dates';
@@ -82,7 +83,9 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     set({ booting: true });
     await initDatabase();
     configureGoogleSignIn();
-    const session = await loadGoogleSession();
+    // Refresh OAuth token on cold start — stored access tokens expire ~1 hour.
+    const session =
+      (await refreshGoogleAccessToken()) ?? (await loadGoogleSession());
     if (session) {
       await ensureHouseholdDefaults(session.name, session.email, session.photoUrl ?? '');
     }
@@ -177,13 +180,20 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   runSync: async () => {
     if (get().session) {
       try {
+        const refreshed = await refreshGoogleAccessToken();
+        if (refreshed) set({ session: refreshed });
         await ensureSpreadsheet();
       } catch {
         // spreadsheet creation may fail without network/scopes
       }
     }
     const result = await syncNow({ force: true, push: true, pull: true });
-    set({ syncMessage: result.message, lastSyncAt: new Date().toISOString() });
+    const session = await loadGoogleSession();
+    set({
+      session,
+      syncMessage: result.message,
+      lastSyncAt: new Date().toISOString(),
+    });
     await get().refresh();
   },
 }));

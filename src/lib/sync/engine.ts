@@ -21,7 +21,12 @@ import {
   transactionTypeLabel,
   type SheetName,
 } from '@/lib/google/sheets';
-import { loadGoogleSession, saveGoogleSession } from '@/lib/google/auth';
+import {
+  isAuthExpiredError,
+  loadGoogleSession,
+  refreshGoogleAccessToken,
+  saveGoogleSession,
+} from '@/lib/google/auth';
 import {
   clearFinanceData,
   enqueueOutbox,
@@ -73,7 +78,8 @@ let syncInFlight: Promise<{ ok: boolean; mode: 'local' | 'sheets'; message: stri
   null;
 
 async function getAccess(): Promise<{ token: string; spreadsheetId: string } | null> {
-  const session = await loadGoogleSession();
+  // Always try to refresh — stored access tokens expire ~1h after login.
+  const session = (await refreshGoogleAccessToken()) ?? (await loadGoogleSession());
   if (!session?.accessToken || !session.spreadsheetId) return null;
   return { token: session.accessToken, spreadsheetId: session.spreadsheetId };
 }
@@ -86,11 +92,18 @@ function friendlySheetsError(e: unknown): string {
       'Your data is still saved on the phone. Wait ~1 minute, then tap Sync now.'
     );
   }
+  if (isAuthExpiredError(message)) {
+    return (
+      'Google session expired.\n\n' +
+      'Open Account → Sign out, then sign in again so Sheets sync can get a fresh token. ' +
+      'Your sheet link and local data stay on the phone.'
+    );
+  }
   return message;
 }
 
 export async function ensureSpreadsheet(): Promise<string | null> {
-  const session = await loadGoogleSession();
+  const session = (await refreshGoogleAccessToken()) ?? (await loadGoogleSession());
   if (!session?.accessToken) return null;
   if (!session.spreadsheetId) return null;
   try {
@@ -102,7 +115,7 @@ export async function ensureSpreadsheet(): Promise<string | null> {
 }
 
 export async function createAndLinkSpreadsheet(title?: string): Promise<string | null> {
-  const session = await loadGoogleSession();
+  const session = (await refreshGoogleAccessToken()) ?? (await loadGoogleSession());
   if (!session?.accessToken) return null;
   if (session.spreadsheetId) return session.spreadsheetId;
 
@@ -124,7 +137,7 @@ export async function linkSpreadsheetFromInput(raw: string): Promise<{
   spreadsheetId?: string;
   message: string;
 }> {
-  const session = await loadGoogleSession();
+  const session = (await refreshGoogleAccessToken()) ?? (await loadGoogleSession());
   if (!session?.accessToken) {
     return { ok: false, message: 'Sign in with Google first.' };
   }

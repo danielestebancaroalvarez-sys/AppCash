@@ -126,6 +126,57 @@ export async function createSessionFromToken(
   return session;
 }
 
+/**
+ * Google access tokens expire in ~1 hour. The app kept the first login token
+ * forever — sync then returns 401. Refresh via Play Services when still signed in.
+ */
+export async function refreshGoogleAccessToken(): Promise<GoogleSession | null> {
+  const session = await loadGoogleSession();
+  if (!session) return null;
+  if (!isGoogleConfigured()) return session;
+
+  configureGoogleSignIn();
+
+  try {
+    const current = await GoogleSignin.getCurrentUser();
+    if (!current) {
+      try {
+        await GoogleSignin.signInSilently();
+      } catch {
+        // Not signed in natively — stored token is all we have (likely expired).
+        return session;
+      }
+    }
+
+    try {
+      await GoogleSignin.clearCachedAccessToken(session.accessToken);
+    } catch {
+      // ignore — still try getTokens()
+    }
+
+    const tokens = await GoogleSignin.getTokens();
+    if (!tokens.accessToken) return session;
+
+    const next: GoogleSession = {
+      ...session,
+      accessToken: tokens.accessToken,
+    };
+    await saveGoogleSession(next);
+    return next;
+  } catch {
+    return session;
+  }
+}
+
+export function isAuthExpiredError(message: string): boolean {
+  return (
+    message.includes('401') ||
+    message.includes('UNAUTHENTICATED') ||
+    message.includes('invalid authentication') ||
+    message.includes('Invalid Credentials')
+  );
+}
+
 export type GoogleSignInResult =
   | { ok: true; session: GoogleSession }
   | { ok: false; cancelled?: boolean; message: string };
