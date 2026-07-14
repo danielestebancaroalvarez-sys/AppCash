@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAppDialog } from '@/components/ui/useAppDialog';
+import { GlassTabBarBackground } from '@/components/ui/GlassTabBarBackground';
 import { Fonts, Palette, Radii } from '@/constants/theme';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -175,13 +176,10 @@ export default function TabsLayout() {
 
   const screenOptions = useMemo(
     () => ({
-      headerStyle: { backgroundColor: Palette.deep },
-      headerTintColor: Palette.text,
-      headerTitleStyle: { fontFamily: Fonts.display, fontWeight: '700' as const },
       tabBarStyle: {
-        backgroundColor: Palette.panel,
-        borderTopColor: Palette.stroke,
-        borderTopWidth: StyleSheet.hairlineWidth,
+        backgroundColor: 'transparent',
+        borderTopColor: 'transparent',
+        borderTopWidth: 0,
         height: tabBarHeight,
         paddingBottom: bottomInset,
         paddingTop: 6,
@@ -189,10 +187,15 @@ export default function TabsLayout() {
         left: 0,
         right: 0,
         bottom: 0,
+        elevation: 0,
       },
+      tabBarBackground: GlassTabBarBackground,
       tabBarActiveTintColor: Palette.cyan,
       tabBarInactiveTintColor: Palette.textDim,
       tabBarLabelStyle: { fontSize: 11, fontFamily: Fonts.body },
+      headerStyle: { backgroundColor: 'rgba(13, 21, 38, 0.88)' },
+      headerTintColor: Palette.text,
+      headerTitleStyle: { fontFamily: Fonts.display, fontWeight: '700' as const },
       headerRight: renderDefaultHeaderRight,
     }),
     [tabBarHeight, bottomInset, renderDefaultHeaderRight]

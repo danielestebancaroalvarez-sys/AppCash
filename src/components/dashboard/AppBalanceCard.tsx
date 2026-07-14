@@ -23,7 +23,11 @@ export function AppBalanceCard({ stats }: { stats: PeriodStats }) {
         </View>
       }>
       <LinearGradient
-        colors={positive ? ['#0B3A4A', '#124E63', '#0D6B7A'] : ['#4A1520', '#6B2030', '#3D1018']}
+        colors={
+          positive
+            ? ['rgba(11,58,74,0.88)', 'rgba(18,78,99,0.75)', 'rgba(13,107,122,0.82)']
+            : ['rgba(74,21,32,0.9)', 'rgba(107,32,48,0.78)', 'rgba(61,16,24,0.85)']
+        }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.card}>

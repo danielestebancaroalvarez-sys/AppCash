@@ -2,7 +2,9 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
-import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { UiImages } from '@/constants/ui-images';
+import { GlassPanel } from '@/components/ui/Primitives';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -40,13 +42,15 @@ export default function ReceiptsListScreen() {
       </View>
 
       {receipts.length === 0 ? (
-        <GlassPanel>
-          <Text style={styles.emptyTitle}>No receipts yet</Text>
-          <Text style={styles.empty}>
-            Add a receipt with basic details (store, date, total). Use Add → Scan only when you want
-            AI line items.
-          </Text>
-          <PrimaryButton label="Add receipt" onPress={() => router.push('/receipts/new' as never)} />
+        <GlassPanel blur>
+          <EmptyState
+            illustration={UiImages.emptyReceipts}
+            icon="receipt-outline"
+            title="No receipts yet"
+            body="Add a receipt with basic details (store, date, total). Use Add → Scan only when you want AI line items."
+            actionLabel="Add receipt"
+            onAction={() => router.push('/receipts/new' as never)}
+          />
         </GlassPanel>
       ) : (
         receipts.map((r) => {
@@ -112,14 +116,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyTitle: {
-    color: Palette.text,
-    fontFamily: Fonts.display,
-    fontWeight: '800',
-    fontSize: 16,
-    marginBottom: 6,
-  },
-  empty: { color: Palette.textDim, fontSize: 13, lineHeight: 18, marginBottom: Spacing.md },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -130,12 +126,12 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: Radii.md,
-    backgroundColor: Palette.panelElevated,
+    backgroundColor: Palette.glassFillStrong,
   },
   thumbFallback: { alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, minWidth: 0 },
   store: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '800', fontSize: 15 },
-  meta: { color: Palette.textDim, fontSize: 12, marginTop: 3 },
+  meta: { color: Palette.textMuted, fontSize: 12, marginTop: 3 },
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   whoName: { color: Palette.textMuted, fontSize: 12, flexShrink: 1 },
   right: { alignItems: 'flex-end', gap: 8 },

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel } from '@/components/ui/Primitives';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { UiImages } from '@/constants/ui-images';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { AppBalanceCard } from '@/components/dashboard/AppBalanceCard';
 import { PeriodBudgetWidget } from '@/components/dashboard/PeriodBudgetWidget';
@@ -103,8 +104,9 @@ export default function DashboardScreen() {
       </Pressable>
 
       {emptyPeriod ? (
-        <GlassPanel style={styles.emptyPanel}>
+        <GlassPanel style={styles.emptyPanel} blur>
           <EmptyState
+            illustration={UiImages.emptyPeriod}
             icon="calendar-outline"
             title="No data in this period"
             body={`Add an expense, income or scan a receipt for ${stats.label}, or switch the week above.`}
@@ -136,8 +138,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
     borderRadius: Radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Palette.stroke,
-    backgroundColor: Palette.panel,
+    borderColor: Palette.glassStroke,
+    backgroundColor: Palette.glassFill,
   },
   marketShortcutIcon: {
     width: 36,

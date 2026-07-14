@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle, StyleProp } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { LiquidPanel } from '@/components/ui/LiquidPanel';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 
 type Props = {
@@ -8,26 +8,16 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
   glow?: boolean;
+  /** Hero surfaces can enable real blur; list widgets stay translucent-only. */
+  blur?: boolean;
 };
 
-export function GlassPanel({ children, style, onPress, glow }: Props) {
-  const body = (
-    <View style={[styles.panel, glow && styles.glow, style]}>
-      <LinearGradient
-        colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']}
-        style={StyleSheet.absoluteFill}
-      />
+export function GlassPanel({ children, style, onPress, glow, blur = false }: Props) {
+  return (
+    <LiquidPanel style={style} onPress={onPress} glow={glow} blur={blur}>
       {children}
-    </View>
+    </LiquidPanel>
   );
-  if (onPress) {
-    return (
-      <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.88 : 1 }]}>
-        {body}
-      </Pressable>
-    );
-  }
-  return body;
 }
 
 export function AmountText({
@@ -79,10 +69,25 @@ export function PrimaryButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.btn,
-        { backgroundColor: bg, borderColor: Palette.stroke, opacity: disabled ? 0.5 : pressed ? 0.85 : 1 },
+        {
+          backgroundColor: bg,
+          borderColor: Palette.stroke,
+          opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
+        },
         variant === 'ghost' && styles.btnGhost,
       ]}>
-      <Text style={[styles.btnText, { color: variant === 'ghost' || variant === 'danger' ? (variant === 'danger' ? Palette.void : color) : color }]}>
+      <Text
+        style={[
+          styles.btnText,
+          {
+            color:
+              variant === 'ghost' || variant === 'danger'
+                ? variant === 'danger'
+                  ? Palette.void
+                  : color
+                : color,
+          },
+        ]}>
         {label}
       </Text>
     </Pressable>
@@ -90,21 +95,6 @@ export function PrimaryButton({
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: Palette.panel,
-    borderRadius: Radii.lg,
-    borderWidth: 1,
-    borderColor: Palette.stroke,
-    padding: Spacing.md,
-    overflow: 'hidden',
-  },
-  glow: {
-    shadowColor: Palette.cyan,
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
-  },
   amount: { fontFamily: Fonts.display, fontWeight: '700' },
   size_sm: { fontSize: 14 },
   size_md: { fontSize: 18 },

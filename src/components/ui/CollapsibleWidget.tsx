@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { Palette, Radii, Spacing } from '@/constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { GlassTokens, Palette, Radii, Spacing } from '@/constants/theme';
 
 type Props = {
   header: ReactNode;
@@ -43,6 +44,12 @@ export function CollapsibleWidget({
 
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={[styles.shell, style]}>
+      <LinearGradient
+        colors={[Palette.glassHighlight, 'transparent', Palette.glassSheen]}
+        locations={[0, 0.4, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <View style={[styles.bar, { backgroundColor: accent }]} />
       <View style={styles.body}>
         <View style={styles.headRow}>
@@ -68,7 +75,7 @@ export function CollapsibleWidget({
             <Ionicons
               name={expanded ? 'chevron-up' : 'chevron-down'}
               size={16}
-              color={Palette.textDim}
+              color={Palette.textMuted}
             />
           </Pressable>
         </View>
@@ -99,15 +106,15 @@ export function CollapsibleWidget({
 const styles = StyleSheet.create({
   shell: {
     flexDirection: 'row',
-    backgroundColor: Palette.panel,
+    backgroundColor: Palette.glassFill,
     borderRadius: Radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Palette.stroke,
+    borderWidth: GlassTokens.borderWidth,
+    borderColor: Palette.glassStroke,
     marginBottom: Spacing.sm,
     overflow: 'hidden',
   },
-  bar: { width: 2 },
-  body: { flex: 1, paddingHorizontal: Spacing.md, paddingVertical: 12 },
+  bar: { width: 2, zIndex: 1 },
+  body: { flex: 1, paddingHorizontal: Spacing.md, paddingVertical: 12, zIndex: 1 },
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',

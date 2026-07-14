@@ -43,51 +43,53 @@ export default function FixedListScreen() {
         </GlassPanel>
       ) : (
         fixedItems.map((item) => {
-        const user = users.find((u) => u.id === item.user_id);
-        const cat = categories.find((c) => c.id === item.category_id);
-        const color = cat?.color || (item.direction === 'in' ? Palette.teal : Palette.coral);
-        return (
-          <GlassPanel key={item.id} style={styles.row}>
-            <View style={[styles.catIcon, { backgroundColor: `${color}28` }]}>
-              <Ionicons name={categoryIonicon(cat?.icon ?? 'cube')} size={18} color={color} />
-            </View>
-            <Pressable
-              style={{ flex: 1 }}
-              onPress={() =>
-                router.push({ pathname: '/fixed/edit' as never, params: { id: item.id } })
-              }>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.meta}>
-                {item.direction === 'in' ? 'Income' : 'Expense'} · {item.period} ·{' '}
-                {item.auto_debit ? 'Auto debit' : `Manual · notify ${item.notify_days_before}d`}
-              </Text>
-              <View style={styles.metaRow}>
-                <UserName user={user} size={16} textStyle={styles.meta} />
-                <Text style={[styles.meta, { color }]}>
-                  · {cat?.name ?? '—'} · next {item.next_due}
-                </Text>
-              </View>
-            </Pressable>
-            <View style={{ alignItems: 'flex-end', gap: 8 }}>
-              <Text
-                style={[
-                  styles.amt,
-                  { color: item.direction === 'in' ? Palette.teal : Palette.coral },
-                ]}>
-                {formatAud(item.amount_aud)}
-              </Text>
-              <Text
-                style={styles.delete}
+          const user = users.find((u) => u.id === item.user_id);
+          const cat = categories.find((c) => c.id === item.category_id);
+          const color = cat?.color || (item.direction === 'in' ? Palette.teal : Palette.coral);
+          const tone = item.direction === 'in' ? Palette.teal : Palette.coral;
+          return (
+            <GlassPanel key={item.id} style={styles.card}>
+              <Pressable
+                style={styles.cardMain}
+                onPress={() =>
+                  router.push({ pathname: '/fixed/edit' as never, params: { id: item.id } })
+                }>
+                <View style={[styles.catIcon, { backgroundColor: `${color}28` }]}>
+                  <Ionicons name={categoryIonicon(cat?.icon ?? 'cube')} size={18} color={color} />
+                </View>
+                <View style={styles.body}>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={[styles.amt, { color: tone }]}>{formatAud(item.amount_aud)}</Text>
+                  </View>
+                  <Text style={styles.meta} numberOfLines={1}>
+                    {item.direction === 'in' ? 'Income' : 'Expense'} · {item.period} ·{' '}
+                    {item.auto_debit ? 'Auto debit' : `Manual · notify ${item.notify_days_before}d`}
+                  </Text>
+                  <View style={styles.metaRow}>
+                    <UserName user={user} size={16} textStyle={styles.meta} />
+                    <Text style={styles.meta} numberOfLines={1}>
+                      · {cat?.name ?? '—'} · next {item.next_due}
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+              <Pressable
+                hitSlop={8}
+                style={styles.deleteBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete ${item.name}`}
                 onPress={() =>
                   confirm(`Delete ${item.name}?`, 'This fixed item will be removed.', () =>
                     remove(item.id), { confirmLabel: 'Delete', tone: 'danger' })
                 }>
-                Delete
-              </Text>
-            </View>
-          </GlassPanel>
-        );
-      })
+                <Ionicons name="trash-outline" size={18} color={Palette.coral} />
+              </Pressable>
+            </GlassPanel>
+          );
+        })
       )}
       {Dialog}
     </Screen>
@@ -95,7 +97,19 @@ export default function FixedListScreen() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', marginBottom: Spacing.sm, gap: 10, alignItems: 'center' },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: Spacing.sm,
+  },
+  cardMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+  },
   catIcon: {
     width: 40,
     height: 40,
@@ -103,15 +117,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '700', fontSize: 16 },
-  meta: { color: Palette.textDim, fontSize: 12 },
+  body: { flex: 1, minWidth: 0, gap: 2 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  name: {
+    flex: 1,
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  meta: { color: Palette.textMuted, fontSize: 12 },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 4,
-    marginTop: 3,
+    marginTop: 2,
   },
-  amt: { fontWeight: '800' },
-  delete: { color: Palette.coral, fontSize: 12 },
+  amt: { fontWeight: '800', fontSize: 15 },
+  deleteBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

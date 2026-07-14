@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 
@@ -8,16 +9,22 @@ export function EmptyState({
   body,
   actionLabel,
   onAction,
+  illustration,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   body?: string;
   actionLabel?: string;
   onAction?: () => void;
+  illustration?: ImageSourcePropType;
 }) {
   return (
     <View style={styles.wrap}>
-      <Ionicons name={icon} size={28} color={Palette.cyan} />
+      {illustration ? (
+        <Image source={illustration} style={styles.illustration} contentFit="contain" transition={180} />
+      ) : (
+        <Ionicons name={icon} size={28} color={Palette.cyan} />
+      )}
       <Text style={styles.title}>{title}</Text>
       {body ? <Text style={styles.body}>{body}</Text> : null}
       {actionLabel && onAction ? (
@@ -81,6 +88,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.md,
   },
+  illustration: {
+    width: 132,
+    height: 132,
+    marginBottom: 4,
+  },
   title: {
     color: Palette.text,
     fontFamily: Fonts.display,
@@ -110,7 +122,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: Radii.md,
     borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: Palette.panelElevated,
+    backgroundColor: Palette.glassFillStrong,
     marginBottom: Spacing.sm,
   },
   bannerText: { flex: 1, fontFamily: Fonts.body, fontSize: 12, lineHeight: 16 },

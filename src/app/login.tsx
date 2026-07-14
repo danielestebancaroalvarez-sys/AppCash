@@ -7,10 +7,12 @@ import {
   View,
 } from 'react-native';
 import { Screen } from '@/components/ui/Screen';
+import { LiquidPanel } from '@/components/ui/LiquidPanel';
 import { AppCashLogo } from '@/components/brand/AppCashLogo';
 import { GoogleGlyph } from '@/components/brand/GoogleGlyph';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
+import { UiImages } from '@/constants/ui-images';
 import {
   isGoogleConfigured,
   saveGoogleSession,
@@ -58,7 +60,6 @@ export default function LoginScreen() {
 
       const session = result.session;
       await seedIfNeeded(session.name, session.email, session.photoUrl ?? '');
-      // Sheet is optional — link later from Account → Purchase sheet
       await saveGoogleSession(session);
       setSession(session);
       await refresh();
@@ -70,7 +71,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <Screen safeTop>
+    <Screen safeTop tabAware={false} backgroundImage={UiImages.bgLogin} backdropDim={0.55}>
       <View style={styles.hero}>
         <AppCashLogo size={112} showWordmark />
         <Text style={styles.tagline}>
@@ -79,40 +80,36 @@ export default function LoginScreen() {
         </Text>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Get started</Text>
-        <Text style={styles.cardSub}>
-          Use the app fully offline. Link Google only when you want a Compras sheet your partner
-          can open and fill.
-        </Text>
+      <LiquidPanel blur intensity="strong" style={styles.card} padded={false}>
+        <View style={styles.cardInner}>
+          <Text style={styles.cardTitle}>Get started</Text>
+          <Text style={styles.cardSub}>
+            Use the app fully offline. Link Google only when you want a Compras sheet your partner
+            can open and fill.
+          </Text>
 
-        <Pressable
-          onPress={onLocal}
-          disabled={busy}
-          style={({ pressed }) => [
-            styles.localBtn,
-            (pressed || busy) && { opacity: 0.88 },
-          ]}>
-          {busy ? (
-            <ActivityIndicator color={Palette.void} />
-          ) : (
-            <Text style={styles.localLabel}>Continue locally</Text>
-          )}
-        </Pressable>
+          <Pressable
+            onPress={onLocal}
+            disabled={busy}
+            style={({ pressed }) => [styles.localBtn, (pressed || busy) && { opacity: 0.88 }]}>
+            {busy ? (
+              <ActivityIndicator color={Palette.void} />
+            ) : (
+              <Text style={styles.localLabel}>Continue locally</Text>
+            )}
+          </Pressable>
 
-        <Pressable
-          onPress={onGoogle}
-          disabled={busy}
-          style={({ pressed }) => [
-            styles.googleBtn,
-            (pressed || busy) && { opacity: 0.88 },
-          ]}>
-          <View style={styles.googleIconWrap}>
-            <GoogleGlyph size={18} />
-          </View>
-          <Text style={styles.googleLabel}>Continue with Google</Text>
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={onGoogle}
+            disabled={busy}
+            style={({ pressed }) => [styles.googleBtn, (pressed || busy) && { opacity: 0.88 }]}>
+            <View style={styles.googleIconWrap}>
+              <GoogleGlyph size={18} />
+            </View>
+            <Text style={styles.googleLabel}>Continue with Google</Text>
+          </Pressable>
+        </View>
+      </LiquidPanel>
 
       <Text style={styles.footer}>Australian dollars · Week starts Monday · Works offline</Text>
       {Dialog}
@@ -136,13 +133,11 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
   },
   card: {
-    backgroundColor: Palette.panel,
-    borderRadius: Radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Palette.stroke,
+    borderRadius: Radii.xl,
+  },
+  cardInner: {
     padding: Spacing.lg,
     gap: Spacing.md,
-    overflow: 'hidden',
   },
   cardTitle: {
     color: Palette.text,

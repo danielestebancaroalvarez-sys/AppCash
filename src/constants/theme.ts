@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 export const Palette = {
   void: '#070B14',
@@ -14,9 +14,21 @@ export const Palette = {
   violet: '#8B7CFF',
   text: '#F4F7FF',
   textMuted: '#8B9BB8',
-  textDim: '#5C6B86',
+  textDim: '#6B7C96',
   white: '#FFFFFF',
   overlay: 'rgba(7, 11, 20, 0.72)',
+  /** Liquid-glass — translucent but still readable over atmospheric bg. */
+  glassFill: 'rgba(18, 28, 49, 0.55)',
+  glassFillStrong: 'rgba(14, 22, 40, 0.7)',
+  glassStroke: 'rgba(255, 255, 255, 0.14)',
+  glassHighlight: 'rgba(255, 255, 255, 0.1)',
+  glassSheen: 'rgba(61, 231, 255, 0.05)',
+} as const;
+
+export const GlassTokens = {
+  blurIntensity: 48,
+  blurIntensityChrome: 64,
+  borderWidth: StyleSheet.hairlineWidth,
 } as const;
 
 export const FinanceColors = {

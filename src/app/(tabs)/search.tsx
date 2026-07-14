@@ -16,6 +16,7 @@ import { addWeeks, format } from 'date-fns';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel } from '@/components/ui/Primitives';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { UiImages } from '@/constants/ui-images';
 import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
 import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
 import { UserAvatar } from '@/components/ui/UserAvatar';
@@ -421,8 +422,9 @@ export default function SearchScreen() {
       </CollapsibleWidget>
 
       {rows.length === 0 ? (
-        <GlassPanel>
+        <GlassPanel blur>
           <EmptyState
+            illustration={UiImages.emptySearch}
             icon="search-outline"
             title="No matching entries"
             body="Try another period, clear filters, or add a purchase from Add."
@@ -791,7 +793,7 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1, minWidth: 0 },
   cardTop: { flexDirection: 'row', gap: 8 },
   cardTitle: { color: Palette.text, fontWeight: '700', fontSize: 15 },
-  cardMeta: { color: Palette.textDim, fontSize: 12, marginTop: 3 },
+  cardMeta: { color: Palette.textMuted, fontSize: 12, marginTop: 3 },
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   whoName: { color: Palette.textMuted, fontSize: 12, flexShrink: 1 },
   cardRight: { alignItems: 'flex-end', gap: 8 },
@@ -803,7 +805,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Palette.panelElevated,
+    backgroundColor: Palette.glassFillStrong,
   },
   modalBackdrop: {
     flex: 1,

@@ -85,12 +85,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Palette.panelElevated,
+    backgroundColor: Palette.glassFillStrong,
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: Radii.pill,
-    borderWidth: 1,
-    borderColor: Palette.stroke,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Palette.glassStroke,
   },
   icon: {
     width: 26,
@@ -99,5 +99,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
+  label: { color: Palette.text, fontSize: 12, fontWeight: '600' },
 });

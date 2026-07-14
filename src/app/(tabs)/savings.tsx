@@ -5,11 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { AppModal } from '@/components/ui/AppModal';
 import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
-import { PrimaryButton } from '@/components/ui/Primitives';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { useAppDialog } from '@/components/ui/useAppDialog';
 import { SavingsSimWidget } from '@/components/savings/SavingsSimWidget';
 import { resolveSavingsCardColor, SectionAccents, savingsKindMeta } from '@/constants/savings';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
+import { UiImages } from '@/constants/ui-images';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { formatAud, parseAmount } from '@/lib/money';
@@ -109,14 +110,14 @@ export default function SavingsScreen() {
       </View>
 
       {!goals.length ? (
-        <View style={styles.empty}>
-          <Ionicons name="wallet-outline" size={40} color={Palette.cyan} />
-          <Text style={styles.emptyTitle}>No goals yet</Text>
-          <Text style={styles.emptySub}>
-            Create your first savings goal — vacation, house, emergency…
-          </Text>
-          <PrimaryButton label="New goal" onPress={() => router.push('/savings/edit' as never)} />
-        </View>
+        <EmptyState
+          illustration={UiImages.emptySavings}
+          icon="wallet-outline"
+          title="No goals yet"
+          body="Create your first savings goal — vacation, house, emergency…"
+          actionLabel="New goal"
+          onAction={() => router.push('/savings/edit' as never)}
+        />
       ) : (
         <>
           {(() => {

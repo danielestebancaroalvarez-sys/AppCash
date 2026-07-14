@@ -145,7 +145,7 @@ export default function ProfileScreen() {
 
   return (
     <Screen tabAware={false}>
-      <GlassPanel glow style={styles.hero}>
+      <GlassPanel glow blur style={styles.hero}>
         <UserAvatar
           user={owner}
           photoUrl={session?.photoUrl || owner?.avatar_url}

@@ -7,8 +7,9 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
+import { Fonts, GlassTokens, Palette, Radii, Spacing } from '@/constants/theme';
 
 export type AppModalTone = 'default' | 'danger' | 'accent';
 
@@ -25,15 +26,10 @@ type Props = {
   onCancel?: () => void;
   onRequestClose?: () => void;
   confirmDisabled?: boolean;
-  /** Hide the cancel / secondary button (e.g. OK-only alerts). */
   hideCancel?: boolean;
   style?: ViewStyle;
 };
 
-/**
- * Reusable confirmation / content modal for AppCash.
- * Use for sign-out, deletes, quick confirms, and custom forms via `children`.
- */
 export function AppModal({
   visible,
   title,
@@ -55,7 +51,7 @@ export function AppModal({
 
   const confirmColor =
     tone === 'danger' ? Palette.coral : tone === 'accent' ? Palette.cyan : Palette.cyan;
-  const confirmTextColor = tone === 'danger' ? Palette.void : Palette.void;
+  const confirmTextColor = Palette.void;
   const showCancel = !hideCancel && Boolean(onCancel || close);
 
   return (
@@ -65,9 +61,8 @@ export function AppModal({
       animationType="fade"
       statusBarTranslucent
       onRequestClose={close}>
-      <Pressable
-        style={styles.backdrop}
-        onPress={dismissOnBackdrop ? close : undefined}>
+      <Pressable style={styles.backdrop} onPress={dismissOnBackdrop ? close : undefined}>
+        <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Pressable
           style={[styles.sheet, { marginBottom: Math.max(insets.bottom, Spacing.md) }, style]}
           onPress={(e) => e.stopPropagation()}>
@@ -107,17 +102,18 @@ export function AppModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: Palette.overlay,
+    backgroundColor: 'rgba(7, 11, 20, 0.45)',
     justifyContent: 'flex-end',
     paddingHorizontal: Spacing.md,
   },
   sheet: {
-    backgroundColor: Palette.panelElevated,
+    backgroundColor: Palette.glassFillStrong,
     borderRadius: Radii.xl,
-    borderWidth: 1,
-    borderColor: Palette.stroke,
+    borderWidth: GlassTokens.borderWidth,
+    borderColor: Palette.glassStroke,
     padding: Spacing.lg,
     gap: Spacing.sm,
+    overflow: 'hidden',
   },
   title: {
     color: Palette.text,
@@ -146,7 +142,7 @@ const styles = StyleSheet.create({
   btnGhost: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: Palette.stroke,
+    borderColor: Palette.glassStroke,
   },
   btnGhostText: {
     color: Palette.textMuted,
