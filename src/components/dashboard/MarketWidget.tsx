@@ -3,13 +3,19 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
 import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
-import { MiniWeekBars } from '@/components/dashboard/charts';
+import { DashboardDonut, MiniWeekBars } from '@/components/dashboard/charts';
 import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { formatAud } from '@/lib/money';
 import type { PeriodStats } from '@/hooks/use-period-stats';
 
 export function MarketWidget({ stats }: { stats: PeriodStats }) {
   const router = useRouter();
+  const pie = stats.marketTopCategories.map((c) => ({
+    label: c.label,
+    value: c.value,
+    color: c.color || Palette.cyan,
+  }));
+  const pieTotal = pie.reduce((a, b) => a + b.value, 0);
 
   return (
     <CollapsibleWidget
@@ -17,7 +23,7 @@ export function MarketWidget({ stats }: { stats: PeriodStats }) {
       header={<WidgetTitle icon="cart-outline" title="Market" iconColor={Palette.teal} />}
       headerActions={
         <Pressable onPress={() => router.push('/insights' as never)} hitSlop={8}>
-          <Text style={styles.seeMore}>See more</Text>
+          <Text style={styles.seeMore}>Predict</Text>
         </Pressable>
       }
       collapsedSummary={
@@ -36,28 +42,20 @@ export function MarketWidget({ stats }: { stats: PeriodStats }) {
         </View>
       </View>
 
+      {pie.length > 0 ? (
+        <>
+          <Text style={styles.section}>Category mix</Text>
+          <DashboardDonut segments={pie} centerAmount={pieTotal} centerLabel="Groceries" />
+        </>
+      ) : (
+        <Text style={styles.empty}>Scan grocery receipts to unlock the category pie.</Text>
+      )}
+
       <Text style={styles.section}>Weekly spending (last weeks)</Text>
       <MiniWeekBars values={stats.marketWeekBars} color={Palette.teal} />
 
-      <Text style={styles.section}>Top categories</Text>
-      {stats.marketTopCategories.length === 0 ? (
-        <Text style={styles.empty}>Scan grocery receipts to unlock breakdown.</Text>
-      ) : (
-        stats.marketTopCategories.map((c) => (
-          <View key={c.label} style={styles.catRow}>
-            <View style={[styles.catDot, { backgroundColor: c.color ?? Palette.cyan }]} />
-            <Text style={styles.catName}>{c.label}</Text>
-            <Text style={styles.catAmt}>
-              {formatAud(c.value)} ({c.pct}%)
-            </Text>
-          </View>
-        ))
-      )}
-
-      <Pressable
-        onPress={() => router.push('/insights' as never)}
-        style={styles.linkRow}>
-        <Text style={styles.link}>See full market analysis</Text>
+      <Pressable onPress={() => router.push('/insights' as never)} style={styles.linkRow}>
+        <Text style={styles.link}>Open market prediction</Text>
         <Ionicons name="arrow-forward" size={14} color={Palette.cyan} />
       </Pressable>
     </CollapsibleWidget>
@@ -79,19 +77,7 @@ const styles = StyleSheet.create({
   kpiLabel: { color: Palette.textDim, fontSize: 11, marginBottom: 4 },
   kpiValue: { color: Palette.text, fontFamily: Fonts.display, fontWeight: '800', fontSize: 18 },
   section: { color: Palette.textDim, fontSize: 11, marginTop: 8, marginBottom: 4 },
-  empty: { color: Palette.textMuted, fontSize: 12 },
-  catRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Palette.stroke,
-  },
-  catDot: { width: 8, height: 8, borderRadius: 4 },
-  catName: { color: Palette.text, fontSize: 13, flex: 1 },
-  catAmt: { color: Palette.textMuted, fontSize: 12, fontWeight: '600' },
+  empty: { color: Palette.textMuted, fontSize: 12, marginVertical: 8 },
   linkRow: {
     flexDirection: 'row',
     alignItems: 'center',

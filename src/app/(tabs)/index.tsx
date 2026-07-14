@@ -1,10 +1,9 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel } from '@/components/ui/Primitives';
-import { EmptyState, SyncBanner } from '@/components/ui/EmptyState';
-import { CollapsibleWidget } from '@/components/ui/CollapsibleWidget';
-import { WidgetTitle } from '@/components/dashboard/WidgetTitle';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { AppBalanceCard } from '@/components/dashboard/AppBalanceCard';
 import { PeriodBudgetWidget } from '@/components/dashboard/PeriodBudgetWidget';
@@ -21,15 +20,14 @@ import { CashflowWidget } from '@/components/dashboard/CashflowWidget';
 import { TopMerchantsWidget } from '@/components/dashboard/TopMerchantsWidget';
 import { GoalsPaceWidget } from '@/components/dashboard/GoalsPaceWidget';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
-import { Palette, Spacing } from '@/constants/theme';
+import { Fonts, Palette, Radii, Spacing } from '@/constants/theme';
 import { useFinanceStore } from '@/stores/finance-store';
 import { usePeriodStats } from '@/hooks/use-period-stats';
 import { useWidgetPrefs } from '@/hooks/use-widget-prefs';
 import { useSheetRefresh } from '@/hooks/use-sheet-refresh';
 import { recomputeProductStats } from '@/lib/insights/market';
 import {
-  HOME_PRIMARY_ORDER,
-  HOME_SECONDARY_ORDER,
+  HOME_WIDGET_ORDER,
   periodHasAnyData,
   widgetHasData,
   type DashboardWidgetId,
@@ -71,10 +69,7 @@ function renderWidget(id: DashboardWidgetId, stats: ReturnType<typeof usePeriodS
 export default function DashboardScreen() {
   const router = useRouter();
   const syncMessage = useFinanceStore((s) => s.syncMessage);
-  const session = useFinanceStore((s) => s.session);
   const pendingSyncCount = useFinanceStore((s) => s.pendingSyncCount);
-  const syncPaused = useFinanceStore((s) => s.syncPaused);
-  const runSync = useFinanceStore((s) => s.runSync);
   const stats = usePeriodStats();
   const { isEnabled } = useWidgetPrefs();
   const { refreshing, onRefresh } = useSheetRefresh(async () => {
@@ -83,8 +78,7 @@ export default function DashboardScreen() {
 
   const show = (id: DashboardWidgetId) => isEnabled(id) && widgetHasData(id, stats);
   const emptyPeriod = !periodHasAnyData(stats);
-  const primaryIds = HOME_PRIMARY_ORDER.filter(show);
-  const secondaryIds = HOME_SECONDARY_ORDER.filter(show);
+  const widgetIds = HOME_WIDGET_ORDER.filter(show);
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
@@ -93,26 +87,20 @@ export default function DashboardScreen() {
 
       <OnboardingChecklist />
 
-      <SyncBanner
-        message={
-          syncPaused
-            ? undefined
-            : session?.spreadsheetId && !pendingSyncCount
-              ? syncMessage || undefined
-              : !session?.spreadsheetId
-                ? 'Offline ledger · Google Sheet optional'
-                : undefined
-        }
-        pendingCount={session?.spreadsheetId ? pendingSyncCount : 0}
-        paused={syncPaused}
-        onPress={
-          session?.spreadsheetId && (pendingSyncCount > 0 || syncPaused)
-            ? () => void runSync()
-            : !session?.spreadsheetId
-              ? () => router.push('/account/sheets' as never)
-              : undefined
-        }
-      />
+      <Pressable
+        onPress={() => router.push('/insights' as never)}
+        style={({ pressed }) => [styles.marketShortcut, pressed && { opacity: 0.88 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Open market prediction">
+        <View style={styles.marketShortcutIcon}>
+          <Ionicons name="trending-up-outline" size={18} color={Palette.teal} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.marketShortcutTitle}>Market prediction</Text>
+          <Text style={styles.marketShortcutSub}>What to buy next from grocery history</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={Palette.textDim} />
+      </Pressable>
 
       {emptyPeriod ? (
         <GlassPanel style={styles.emptyPanel}>
@@ -126,32 +114,9 @@ export default function DashboardScreen() {
         </GlassPanel>
       ) : null}
 
-      {primaryIds.map((id) => (
+      {widgetIds.map((id) => (
         <View key={id}>{renderWidget(id, stats)}</View>
       ))}
-
-      {secondaryIds.length > 0 ? (
-        <CollapsibleWidget
-          accent={Palette.textDim}
-          defaultExpanded={false}
-          accessibilityLabel="More insights this period"
-          header={
-            <WidgetTitle
-              icon="layers-outline"
-              title="More this period"
-              iconColor={Palette.textMuted}
-            />
-          }
-          collapsedSummary={
-            <Text style={styles.moreSummary}>
-              {secondaryIds.length} more insight{secondaryIds.length === 1 ? '' : 's'}
-            </Text>
-          }>
-          {secondaryIds.map((id) => (
-            <View key={id}>{renderWidget(id, stats)}</View>
-          ))}
-        </CollapsibleWidget>
-      ) : null}
 
       {syncMessage && !pendingSyncCount ? <Text style={styles.sync}>{syncMessage}</Text> : null}
     </Screen>
@@ -162,7 +127,33 @@ const styles = StyleSheet.create({
   emptyPanel: {
     marginBottom: Spacing.md,
   },
-  moreSummary: { color: Palette.textDim, fontSize: 12 },
+  marketShortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: Spacing.sm,
+    borderRadius: Radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Palette.stroke,
+    backgroundColor: Palette.panel,
+  },
+  marketShortcutIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(61,231,255,0.12)',
+  },
+  marketShortcutTitle: {
+    color: Palette.text,
+    fontFamily: Fonts.display,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  marketShortcutSub: { color: Palette.textDim, fontSize: 11, marginTop: 2 },
   sync: {
     color: Palette.textDim,
     fontSize: 11,

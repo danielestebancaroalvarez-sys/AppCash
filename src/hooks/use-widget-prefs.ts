@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
+import { create } from 'zustand';
 import {
   defaultWidgetPrefs,
   loadWidgetPrefs,
@@ -7,29 +8,41 @@ import {
   type WidgetPrefs,
 } from '@/lib/dashboard/widgets';
 
-export function useWidgetPrefs() {
-  const [prefs, setPrefs] = useState<WidgetPrefs>(defaultWidgetPrefs);
-  const [ready, setReady] = useState(false);
+interface WidgetPrefsState {
+  prefs: WidgetPrefs;
+  ready: boolean;
+  bootstrap: () => Promise<void>;
+  setEnabled: (id: DashboardWidgetId, enabled: boolean) => Promise<void>;
+}
 
-  const reload = useCallback(async () => {
-    const next = await loadWidgetPrefs();
-    setPrefs(next);
-    setReady(true);
-  }, []);
+export const useWidgetPrefsStore = create<WidgetPrefsState>((set, get) => ({
+  prefs: defaultWidgetPrefs(),
+  ready: false,
+
+  bootstrap: async () => {
+    const prefs = await loadWidgetPrefs();
+    set({ prefs, ready: true });
+  },
+
+  setEnabled: async (id, enabled) => {
+    const prefs = { ...get().prefs, [id]: enabled };
+    set({ prefs });
+    await saveWidgetPrefs(prefs);
+  },
+}));
+
+/** Shared prefs so More toggles update Home immediately. */
+export function useWidgetPrefs() {
+  const prefs = useWidgetPrefsStore((s) => s.prefs);
+  const ready = useWidgetPrefsStore((s) => s.ready);
+  const bootstrap = useWidgetPrefsStore((s) => s.bootstrap);
+  const setEnabled = useWidgetPrefsStore((s) => s.setEnabled);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  const setEnabled = useCallback(async (id: DashboardWidgetId, enabled: boolean) => {
-    setPrefs((prev) => {
-      const next = { ...prev, [id]: enabled };
-      void saveWidgetPrefs(next);
-      return next;
-    });
-  }, []);
+    if (!ready) void bootstrap();
+  }, [ready, bootstrap]);
 
   const isEnabled = useCallback((id: DashboardWidgetId) => prefs[id] !== false, [prefs]);
 
-  return { prefs, ready, reload, setEnabled, isEnabled };
+  return { prefs, ready, reload: bootstrap, setEnabled, isEnabled };
 }

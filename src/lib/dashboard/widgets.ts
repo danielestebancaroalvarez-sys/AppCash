@@ -1,8 +1,8 @@
 import type { PeriodStats } from '@/hooks/use-period-stats';
 import { getSetting, setSetting } from '@/lib/db';
 
-/** Bumped with Calm Ledger / offline-first defaults. */
-export const WIDGET_PREF_KEY = 'dashboard_widgets_v2';
+/** Bumped when home defaults change (market pie + flat widget list). */
+export const WIDGET_PREF_KEY = 'dashboard_widgets_v3';
 
 export type DashboardWidgetId =
   | 'period_budget'
@@ -31,7 +31,7 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
   {
     id: 'period_budget',
     label: 'Period Budget',
-    hint: 'Income vs spend + category weekly caps',
+    hint: 'Income split: fixed, variable, savings, free',
     defaultOn: true,
   },
   {
@@ -67,8 +67,8 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
   {
     id: 'market',
     label: 'Market',
-    hint: 'Grocery week vs average',
-    defaultOn: false,
+    hint: 'Grocery week vs average · category pie',
+    defaultOn: true,
   },
   {
     id: 'daily_spend',
@@ -80,7 +80,7 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
     id: 'upcoming_buys',
     label: 'Upcoming Buys',
     hint: 'Likely purchases from receipts',
-    defaultOn: false,
+    defaultOn: true,
   },
   {
     id: 'upcoming_bills',
@@ -108,24 +108,27 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
   },
 ];
 
-export const HOME_PRIMARY_ORDER: DashboardWidgetId[] = [
+/** Flat home order — no "More this period" split. */
+export const HOME_WIDGET_ORDER: DashboardWidgetId[] = [
+  'market',
+  'period_budget',
   'period_expenses',
+  'upcoming_buys',
   'expenses_by_person',
   'daily_spend',
   'upcoming_bills',
   'savings_goals',
-  'period_budget',
-];
-
-export const HOME_SECONDARY_ORDER: DashboardWidgetId[] = [
   'trend',
   'cashflow',
-  'market',
-  'upcoming_buys',
   'top_merchants',
   'goals_pace',
   'converter',
 ];
+
+/** @deprecated use HOME_WIDGET_ORDER */
+export const HOME_PRIMARY_ORDER = HOME_WIDGET_ORDER;
+/** @deprecated empty — home no longer splits widgets */
+export const HOME_SECONDARY_ORDER: DashboardWidgetId[] = [];
 
 export type WidgetPrefs = Record<DashboardWidgetId, boolean>;
 

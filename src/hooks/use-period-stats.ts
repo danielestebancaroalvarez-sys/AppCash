@@ -105,7 +105,9 @@ export function usePeriodStats(): PeriodStats {
     const expenseVariable = weekPurchases
       .filter((t) => t.type === 'expense_sporadic' || t.type === 'variable')
       .reduce((a, t) => a + t.amount_aud, 0);
-    const savingsContrib = weekPurchases
+    // Count all savings contributions in the week (do not use purchase-level filter —
+    // contrib notes can look like product lines and drop out of weekPurchases).
+    const savingsContrib = weekTx
       .filter((t) => t.type === 'savings_contrib')
       .reduce((a, t) => a + t.amount_aud, 0);
     const incomeFixed = fixedItems

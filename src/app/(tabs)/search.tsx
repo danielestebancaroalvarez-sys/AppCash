@@ -124,14 +124,19 @@ export default function SearchScreen() {
         .includes(query);
     });
 
-    // One row per receipt purchase
+    // One row per receipt purchase + unique ids (avoid duplicate React keys)
     const seenReceipts = new Set<string>();
+    const seenIds = new Set<string>();
     const deduped: Transaction[] = [];
     for (const t of filtered) {
+      if (seenIds.has(t.id)) continue;
       if (t.receipt_id) {
         if (seenReceipts.has(t.receipt_id)) continue;
         seenReceipts.add(t.receipt_id);
       }
+      // Also mark synthetic id form so orphan receipt injection won't clash
+      if (t.receipt_id) seenIds.add(`tx_${t.receipt_id}`);
+      seenIds.add(t.id);
       deduped.push(t);
     }
 
@@ -139,7 +144,8 @@ export default function SearchScreen() {
     if (typeFilter !== 'income') {
       for (const r of receipts) {
         const date = normalizeReceiptDate(r.purchased_at);
-        if (seenReceipts.has(r.id)) continue;
+        const synthId = `tx_${r.id}`;
+        if (seenReceipts.has(r.id) || seenIds.has(synthId) || seenIds.has(r.id)) continue;
         if (start && end && !inRange(date, start, end)) continue;
         if (userId !== 'all' && r.user_id !== userId) continue;
         if (min != null && !Number.isNaN(min) && r.total_aud < min) continue;
@@ -151,8 +157,9 @@ export default function SearchScreen() {
           continue;
         }
         seenReceipts.add(r.id);
+        seenIds.add(synthId);
         deduped.push({
-          id: `tx_${r.id}`,
+          id: synthId,
           user_id: r.user_id,
           type: 'expense_sporadic',
           category_id: categories.find((c) => c.name.toLowerCase() === 'groceries')?.id ?? '',
@@ -424,7 +431,7 @@ export default function SearchScreen() {
           />
         </GlassPanel>
       ) : (
-        rows.map((t) => {
+        rows.map((t, index) => {
           const user = users.find((u) => u.id === t.user_id);
           const cat = categories.find((c) => c.id === t.category_id);
           const income = isIncome(t.type);
@@ -443,7 +450,7 @@ export default function SearchScreen() {
             });
           };
           return (
-            <GlassPanel key={t.id} style={styles.card}>
+            <GlassPanel key={`${t.id}__${index}`} style={styles.card}>
               <Pressable onPress={openDetails} style={styles.cardPress}>
               <View
                 style={[

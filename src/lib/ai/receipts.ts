@@ -38,12 +38,47 @@ const RECEIPT_JPEG_QUALITY = 0.55;
 
 const KEYS = {
   provider: 'appcash_receipt_ai_provider',
+  providerOrder: 'appcash_receipt_ai_order_v1',
   openrouter: 'appcash_openrouter_api_key',
   deepseek: 'appcash_deepseek_api_key',
   gemini: 'appcash_gemini_api_key',
   nvidia: 'appcash_nvidia_api_key',
   ocrSpace: 'appcash_ocrspace_api_key',
 } as const;
+
+export const DEFAULT_RECEIPT_PROVIDER_ORDER: ReceiptAiProvider[] = [
+  'gemini',
+  'nvidia',
+  'openrouter',
+];
+
+export async function getReceiptProviderOrder(): Promise<ReceiptAiProvider[]> {
+  const raw = await SecureStore.getItemAsync(KEYS.providerOrder);
+  if (!raw) return [...DEFAULT_RECEIPT_PROVIDER_ORDER];
+  try {
+    const parsed = JSON.parse(raw) as string[];
+    const valid = parsed.filter(
+      (p): p is ReceiptAiProvider => p === 'gemini' || p === 'nvidia' || p === 'openrouter'
+    );
+    for (const p of DEFAULT_RECEIPT_PROVIDER_ORDER) {
+      if (!valid.includes(p)) valid.push(p);
+    }
+    return valid.length ? valid : [...DEFAULT_RECEIPT_PROVIDER_ORDER];
+  } catch {
+    return [...DEFAULT_RECEIPT_PROVIDER_ORDER];
+  }
+}
+
+export async function setReceiptProviderOrder(order: ReceiptAiProvider[]): Promise<void> {
+  const clean = order.filter(
+    (p, i, arr): p is ReceiptAiProvider =>
+      (p === 'gemini' || p === 'nvidia' || p === 'openrouter') && arr.indexOf(p) === i
+  );
+  for (const p of DEFAULT_RECEIPT_PROVIDER_ORDER) {
+    if (!clean.includes(p)) clean.push(p);
+  }
+  await SecureStore.setItemAsync(KEYS.providerOrder, JSON.stringify(clean));
+}
 
 /** Strip quotes/whitespace users often paste from dashboards. */
 function sanitizeApiKey(key: string): string {
@@ -811,6 +846,12 @@ async function parseWithNvidia(
     }
   }
 
+  // OCR.space is optional — without a key, fail vision cleanly so the next provider runs.
+  const ocrKey = await getOcrSpaceApiKey();
+  if (!ocrKey) {
+    throw new Error(lastError);
+  }
+
   try {
     return await parseNvidiaFromOcr(apiKey, prepared, onProgress);
   } catch (e) {
@@ -820,7 +861,7 @@ async function parseWithNvidia(
 }
 
 /**
- * Fixed cascade: Gemini → NVIDIA → OpenRouter.
+ * Provider cascade order is configurable in Settings → AI (default Gemini → NVIDIA → OpenRouter).
  * Within each provider, failed models fall through to the next model.
  */
 export async function parseReceiptImage(
@@ -832,31 +873,29 @@ export async function parseReceiptImage(
 
   const prepared = await prepareReceiptImage(imageUri, onProgress);
 
-  const cascade: Array<{
-    id: ReceiptAiProvider;
-    hasKey: () => Promise<string>;
-    run: () => Promise<ParsedReceipt>;
-  }> = [
-    {
-      id: 'gemini',
+  const runners: Record<
+    ReceiptAiProvider,
+    { hasKey: () => Promise<string>; run: () => Promise<ParsedReceipt> }
+  > = {
+    gemini: {
       hasKey: getGeminiApiKey,
       run: () => parseWithGemini(prepared, onProgress),
     },
-    {
-      id: 'nvidia',
+    nvidia: {
       hasKey: getNvidiaApiKey,
       run: () => parseWithNvidia(prepared, onProgress),
     },
-    {
-      id: 'openrouter',
+    openrouter: {
       hasKey: getOpenRouterApiKey,
       run: () => parseWithOpenRouter(prepared, onProgress),
     },
-  ];
+  };
 
+  const order = await getReceiptProviderOrder();
   const available = [];
-  for (const step of cascade) {
-    if (await step.hasKey()) available.push(step);
+  for (const id of order) {
+    const step = runners[id];
+    if (await step.hasKey()) available.push({ id, ...step });
   }
 
   if (!available.length) {

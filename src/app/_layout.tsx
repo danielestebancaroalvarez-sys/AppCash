@@ -5,6 +5,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFinanceStore } from '@/stores/finance-store';
+import { useWidgetPrefsStore } from '@/hooks/use-widget-prefs';
 import { Palette, Fonts } from '@/constants/theme';
 import { flushPendingPurchasesSync, syncNow } from '@/lib/sync/engine';
 
@@ -16,14 +17,16 @@ function AuthGate({ children }: { children: ReactNode }) {
   const session = useFinanceStore((s) => s.session);
   const localMode = useFinanceStore((s) => s.localMode);
   const bootstrap = useFinanceStore((s) => s.bootstrap);
+  const bootstrapWidgets = useWidgetPrefsStore((s) => s.bootstrap);
   const refresh = useFinanceStore((s) => s.refresh);
   const router = useRouter();
   const segments = useSegments();
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    void bootstrap();
+    void bootstrapWidgets();
+  }, [bootstrap, bootstrapWidgets]);
 
   useEffect(() => {
     if (!ready) return;

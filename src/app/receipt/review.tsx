@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/ui/Screen';
 import { GlassPanel, PrimaryButton } from '@/components/ui/Primitives';
@@ -30,6 +30,8 @@ export default function ReceiptReviewScreen() {
   const session = useFinanceStore((s) => s.session);
   const refresh = useFinanceStore((s) => s.refresh);
   const { alert, Dialog } = useAppDialog();
+  const [saving, setSaving] = useState(false);
+  const receiptIdRef = useRef(createId());
 
   const initial = useMemo<ParsedReceipt>(() => {
     try {
@@ -52,62 +54,71 @@ export default function ReceiptReviewScreen() {
   };
 
   const saveReceipt = async () => {
+    if (saving) return;
     const grocery = categories.find((c) => c.name.toLowerCase() === 'groceries') ?? categories[0];
     if (!grocery || !userId) {
       alert('Missing category/user', 'Create a Groceries category and pick who paid.');
       return;
     }
-    const receiptId = createId();
-    const dateIso = normalizeReceiptDate(date);
-    const productItems = items.filter((item) => !isReceiptNoiseLine(item.name || ''));
-    const photoRef = await tryUploadReceiptPhoto(session?.accessToken, photoUri ?? '', receiptId);
-    const receipt = {
-      id: receiptId,
-      user_id: userId,
-      store: store.trim() || 'Store',
-      total_aud: parseAmount(total),
-      photo_uri_or_drive_id: photoRef || photoUri || '',
-      purchased_at: `${dateIso}T12:00:00`,
-      raw_gemini_json: draft ?? '',
-      updated_at: nowIso(),
-    };
-    await upsertReceipt(receipt);
-    await queueMutation('receipts', receipt);
-
-    for (const item of productItems) {
-      const row = {
-        id: createId(),
-        receipt_id: receiptId,
-        name: item.name,
-        qty: item.qty,
-        unit_price_aud: item.unit_price_aud,
-        line_total_aud: item.line_total_aud,
-        category_guess: item.category_guess,
+    setSaving(true);
+    try {
+      const receiptId = receiptIdRef.current;
+      const dateIso = normalizeReceiptDate(date);
+      const productItems = items.filter((item) => !isReceiptNoiseLine(item.name || ''));
+      // Keep local URI if Drive upload fails — don't lose the photo or create a bare drive id.
+      const localPhoto = photoUri ?? '';
+      const photoRef = await tryUploadReceiptPhoto(session?.accessToken, localPhoto, receiptId);
+      const receipt = {
+        id: receiptId,
+        user_id: userId,
+        store: store.trim() || 'Store',
+        total_aud: parseAmount(total),
+        photo_uri_or_drive_id: localPhoto || photoRef || '',
+        purchased_at: `${dateIso}T12:00:00`,
+        raw_gemini_json: draft ?? '',
         updated_at: nowIso(),
       };
-      await upsertReceiptItem(row);
-      await queueMutation('receipt_items', row);
-    }
+      await upsertReceipt(receipt);
+      await queueMutation('receipts', receipt);
 
-    const tx = {
-      id: `tx_${receiptId}`,
-      user_id: userId,
-      type: 'expense_sporadic' as const,
-      category_id: grocery.id,
-      amount_aud: parseAmount(total) || productItems.reduce((a, i) => a + i.line_total_aud, 0),
-      date: dateIso,
-      note: `Receipt ${store.trim() || 'Store'}`,
-      merchant: store.trim() || 'Store',
-      receipt_id: receiptId,
-      created_at: nowIso(),
-      updated_at: nowIso(),
-    };
-    await upsertTransaction(tx);
-    await queueMutation('transactions', tx);
-    await recomputeProductStats();
-    await refresh();
-    alert('Saved', 'Receipt and line items stored.');
-    router.back();
+      for (const item of productItems) {
+        const row = {
+          id: createId(),
+          receipt_id: receiptId,
+          name: item.name,
+          qty: item.qty,
+          unit_price_aud: item.unit_price_aud,
+          line_total_aud: item.line_total_aud,
+          category_guess: item.category_guess,
+          updated_at: nowIso(),
+        };
+        await upsertReceiptItem(row);
+        await queueMutation('receipt_items', row);
+      }
+
+      const tx = {
+        id: `tx_${receiptId}`,
+        user_id: userId,
+        type: 'expense_sporadic' as const,
+        category_id: grocery.id,
+        amount_aud: parseAmount(total) || productItems.reduce((a, i) => a + i.line_total_aud, 0),
+        date: dateIso,
+        note: `Receipt ${store.trim() || 'Store'}`,
+        merchant: store.trim() || 'Store',
+        receipt_id: receiptId,
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      };
+      await upsertTransaction(tx);
+      await queueMutation('transactions', tx);
+      await recomputeProductStats();
+      await refresh();
+      alert('Saved', 'Receipt and line items stored.');
+      router.back();
+    } catch (e) {
+      alert('Could not save', e instanceof Error ? e.message : 'Try again.');
+      setSaving(false);
+    }
   };
 
   return (
@@ -166,7 +177,11 @@ export default function ReceiptReviewScreen() {
         </GlassPanel>
       ))}
 
-      <PrimaryButton label="Confirm & save" onPress={saveReceipt} />
+      <PrimaryButton
+        label={saving ? 'Saving…' : 'Confirm & save'}
+        onPress={saveReceipt}
+        disabled={saving}
+      />
       <View style={{ height: 24 }} />
       {Dialog}
     </Screen>
