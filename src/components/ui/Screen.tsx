@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   View,
@@ -10,10 +11,12 @@ import {
   StatusBar,
   type ImageSourcePropType,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Palette, Spacing } from '@/constants/theme';
 import { UiImages } from '@/constants/ui-images';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
+
+const NAV_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 56;
 
 type Props = {
   children: ReactNode;
@@ -41,7 +44,19 @@ export function Screen({
   backdropDim = 0.62,
 }: Props) {
   const { contentPadding } = useTabBarHeight();
-  const content = <View style={[padded && styles.pad, style]}>{children}</View>;
+  const insets = useSafeAreaInsets();
+  /** Tabs use a transparent liquid header — content draws under it. */
+  const topInset = tabAware ? insets.top + NAV_BAR_HEIGHT : 0;
+  const content = (
+    <View
+      style={[
+        padded && styles.pad,
+        topInset > 0 && { paddingTop: topInset + (padded ? Spacing.xs : 0) },
+        style,
+      ]}>
+      {children}
+    </View>
+  );
 
   return (
     <View style={styles.root}>
@@ -84,6 +99,7 @@ export function Screen({
                   tintColor={Palette.cyan}
                   colors={[Palette.cyan]}
                   progressBackgroundColor={Palette.panelElevated}
+                  progressViewOffset={topInset}
                 />
               ) : undefined
             }>

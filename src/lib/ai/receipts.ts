@@ -6,7 +6,7 @@ import type { ParsedReceipt } from '@/types/models';
 import { normalizeReceiptDate, todayIsoDate } from '@/lib/dates';
 import { isReceiptNoiseLine } from '@/lib/purchases/filter';
 
-/** Cascade providers (DeepSeek removed). Order is always Gemini → NVIDIA → OpenRouter. */
+/** Cascade providers — order is configurable in Settings → AI. */
 export type ReceiptAiProvider = 'gemini' | 'nvidia' | 'openrouter';
 
 export type ReceiptScanProgress = {
@@ -37,10 +37,8 @@ const RECEIPT_MAX_EDGE = 1280;
 const RECEIPT_JPEG_QUALITY = 0.55;
 
 const KEYS = {
-  provider: 'appcash_receipt_ai_provider',
   providerOrder: 'appcash_receipt_ai_order_v1',
   openrouter: 'appcash_openrouter_api_key',
-  deepseek: 'appcash_deepseek_api_key',
   gemini: 'appcash_gemini_api_key',
   nvidia: 'appcash_nvidia_api_key',
   ocrSpace: 'appcash_ocrspace_api_key',
@@ -112,23 +110,6 @@ const PROVIDER_LABEL: Record<ReceiptAiProvider, string> = {
   openrouter: 'OpenRouter',
 };
 
-/** @deprecated Cascade is fixed; kept for Settings compatibility. */
-export async function getReceiptProvider(): Promise<ReceiptAiProvider> {
-  const stored = await SecureStore.getItemAsync(KEYS.provider);
-  if (stored === 'openrouter' || stored === 'gemini' || stored === 'nvidia') {
-    return stored;
-  }
-  if (await getGeminiApiKey()) return 'gemini';
-  if (await getNvidiaApiKey()) return 'nvidia';
-  if (await getOpenRouterApiKey()) return 'openrouter';
-  return 'gemini';
-}
-
-/** @deprecated Cascade is fixed; kept for Settings compatibility. */
-export async function setReceiptProvider(provider: ReceiptAiProvider): Promise<void> {
-  await SecureStore.setItemAsync(KEYS.provider, provider);
-}
-
 export async function getOpenRouterApiKey(): Promise<string> {
   return sanitizeApiKey(
     (await SecureStore.getItemAsync(KEYS.openrouter)) ||
@@ -144,25 +125,6 @@ export async function setOpenRouterApiKey(key: string): Promise<void> {
     return;
   }
   await SecureStore.setItemAsync(KEYS.openrouter, clean);
-}
-
-/** @deprecated DeepSeek removed from cascade */
-export async function getDeepSeekApiKey(): Promise<string> {
-  return sanitizeApiKey(
-    (await SecureStore.getItemAsync(KEYS.deepseek)) ||
-      process.env.EXPO_PUBLIC_DEEPSEEK_API_KEY ||
-      ''
-  );
-}
-
-/** @deprecated DeepSeek removed from cascade */
-export async function setDeepSeekApiKey(key: string): Promise<void> {
-  const clean = sanitizeApiKey(key);
-  if (!clean) {
-    await SecureStore.deleteItemAsync(KEYS.deepseek);
-    return;
-  }
-  await SecureStore.setItemAsync(KEYS.deepseek, clean);
 }
 
 export async function getGeminiApiKey(): Promise<string> {
@@ -181,12 +143,8 @@ export async function setGeminiApiKey(key: string): Promise<void> {
 }
 
 export async function getNvidiaApiKey(): Promise<string> {
-  // One key only. EXPO_PUBLIC_NVAPI_API_KEY kept as legacy alias (same NVIDIA key).
   return sanitizeApiKey(
-    (await SecureStore.getItemAsync(KEYS.nvidia)) ||
-      process.env.EXPO_PUBLIC_NVIDIA_API_KEY ||
-      process.env.EXPO_PUBLIC_NVAPI_API_KEY ||
-      ''
+    (await SecureStore.getItemAsync(KEYS.nvidia)) || process.env.EXPO_PUBLIC_NVIDIA_API_KEY || ''
   );
 }
 
@@ -956,9 +914,4 @@ export async function parseReceiptImage(
   throw new Error(
     `All providers failed.\n\n${errors.map((e) => `• ${e}`).join('\n')}\n\nCheck keys in Settings → AI.`
   );
-}
-
-/** @deprecated use parseReceiptImage */
-export async function parseReceiptWithGemini(imageUri: string): Promise<ParsedReceipt> {
-  return parseReceiptImage(imageUri);
 }

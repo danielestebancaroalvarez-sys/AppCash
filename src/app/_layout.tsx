@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useWidgetPrefsStore } from '@/hooks/use-widget-prefs';
 import { Palette, Fonts } from '@/constants/theme';
+import { GlassHeaderBackground } from '@/components/ui/GlassTabBarBackground';
 import { flushPendingPurchasesSync, syncNow } from '@/lib/sync/engine';
 
 const queryClient = new QueryClient();
@@ -99,7 +100,8 @@ export default function RootLayout() {
       <AuthGate>
         <Stack
           screenOptions={{
-            headerStyle: { backgroundColor: Palette.deep },
+            headerStyle: { backgroundColor: 'transparent' },
+            headerBackground: GlassHeaderBackground,
             headerTintColor: Palette.text,
             headerTitleStyle: { fontFamily: Fonts.display, fontWeight: '700' },
             contentStyle: { backgroundColor: Palette.void },

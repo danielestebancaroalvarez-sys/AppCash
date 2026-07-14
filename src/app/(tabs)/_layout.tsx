@@ -4,7 +4,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAppDialog } from '@/components/ui/useAppDialog';
-import { GlassTabBarBackground } from '@/components/ui/GlassTabBarBackground';
+import {
+  GlassHeaderBackground,
+  GlassTabBarBackground,
+} from '@/components/ui/GlassTabBarBackground';
 import { Fonts, Palette, Radii } from '@/constants/theme';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useFinanceStore } from '@/stores/finance-store';
@@ -193,7 +196,10 @@ export default function TabsLayout() {
       tabBarActiveTintColor: Palette.cyan,
       tabBarInactiveTintColor: Palette.textDim,
       tabBarLabelStyle: { fontSize: 11, fontFamily: Fonts.body },
-      headerStyle: { backgroundColor: 'rgba(13, 21, 38, 0.88)' },
+      headerTransparent: true,
+      headerStyle: { backgroundColor: 'transparent' },
+      headerBackground: GlassHeaderBackground,
+      headerShadowVisible: false,
       headerTintColor: Palette.text,
       headerTitleStyle: { fontFamily: Fonts.display, fontWeight: '700' as const },
       headerRight: renderDefaultHeaderRight,

@@ -4,7 +4,7 @@ import { useFinanceStore, useWeekRange } from '@/stores/finance-store';
 import { getWeekRange, inRange } from '@/lib/dates';
 import { prorateWeekly } from '@/lib/dashboard/prorate';
 import { recommendUpcoming } from '@/lib/insights/market';
-import type { AppUser, Category, FixedItem, SavingsGoal, Transaction } from '@/types/models';
+import type { AppUser, FixedItem, SavingsGoal, Transaction } from '@/types/models';
 import { Palette, CategoryPalette } from '@/constants/theme';
 import { isLikelyProductName, isPurchaseLevelTransaction } from '@/lib/purchases/filter';
 import { marketCategoryColor, categorizeProduct } from '@/lib/insights/categories';
@@ -298,8 +298,4 @@ export function usePeriodStats(): PeriodStats {
     end,
     label,
   ]);
-}
-
-export function categoryName(categories: Category[], id: string): string {
-  return categories.find((c) => c.id === id)?.name ?? '—';
 }

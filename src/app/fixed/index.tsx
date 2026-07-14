@@ -28,7 +28,7 @@ export default function FixedListScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabAware={false}>
       <PrimaryButton label="Add fixed item" onPress={() => router.push('/fixed/edit' as never)} />
       <SectionTitle title="Active fixed items" subtitle="Auto-debit vs manual + reminders" />
       {fixedItems.length === 0 ? (

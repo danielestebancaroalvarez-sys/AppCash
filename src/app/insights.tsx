@@ -92,7 +92,7 @@ export default function InsightsScreen() {
 
   if (!dash.trackedCount) {
     return (
-      <Screen>
+      <Screen tabAware={false}>
         <Text style={styles.title}>Market prediction</Text>
         <Text style={styles.sub}>
           Frequency, spend and shelf-life estimates from scanned receipt history.
@@ -114,7 +114,7 @@ export default function InsightsScreen() {
   }));
 
   return (
-    <Screen>
+    <Screen tabAware={false}>
       <Text style={styles.title}>Market prediction</Text>
       <Text style={styles.sub}>
         How often you buy each item, how long it lasts, where money goes, and what to buy next.

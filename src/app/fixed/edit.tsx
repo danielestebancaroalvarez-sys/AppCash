@@ -113,7 +113,7 @@ export default function FixedEditScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabAware={false}>
       <GlassPanel style={{ gap: Spacing.sm }}>
         <Text style={styles.label}>Name</Text>
         <TextInput

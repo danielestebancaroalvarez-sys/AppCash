@@ -122,7 +122,7 @@ export default function ReceiptReviewScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabAware={false}>
       {photoUri ? <Image source={{ uri: photoUri }} style={styles.photo} /> : null}
       <GlassPanel style={{ gap: Spacing.sm, marginBottom: Spacing.md }}>
         <Text style={styles.label}>Store</Text>

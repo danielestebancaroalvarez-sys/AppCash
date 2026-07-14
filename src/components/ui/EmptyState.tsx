@@ -43,51 +43,6 @@ export function EmptyState({
   );
 }
 
-export function SyncBanner({
-  message,
-  pendingCount,
-  paused,
-  onPress,
-}: {
-  message?: string;
-  pendingCount?: number;
-  paused?: boolean;
-  onPress?: () => void;
-}) {
-  if (!message && !pendingCount) return null;
-  const tone = paused ? Palette.amber : pendingCount ? Palette.cyan : Palette.textDim;
-  const text =
-    message ||
-    (paused
-      ? 'Purchase sync paused — tap to retry'
-      : pendingCount
-        ? `${pendingCount} purchase change(s) waiting to sync`
-        : '');
-
-  const inner = (
-    <View style={[styles.banner, { borderColor: `${tone}55` }]}>
-      <Ionicons
-        name={paused ? 'warning-outline' : pendingCount ? 'cloud-upload-outline' : 'cloud-done-outline'}
-        size={16}
-        color={tone}
-      />
-      <Text style={[styles.bannerText, { color: tone }]} numberOfLines={2}>
-        {text}
-      </Text>
-      {onPress ? <Ionicons name="chevron-forward" size={14} color={tone} /> : null}
-    </View>
-  );
-
-  if (onPress) {
-    return (
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={text}>
-        {inner}
-      </Pressable>
-    );
-  }
-  return inner;
-}
-
 const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
@@ -130,16 +85,4 @@ const styles = StyleSheet.create({
     borderRadius: Radii.md,
   },
   btnText: { color: Palette.void, fontFamily: Fonts.display, fontSize: 14 },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: Radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: Palette.glassFillStrong,
-    marginBottom: Spacing.sm,
-  },
-  bannerText: { flex: 1, fontFamily: Fonts.body, fontSize: 12, lineHeight: 16 },
 });

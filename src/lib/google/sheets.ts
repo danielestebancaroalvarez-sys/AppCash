@@ -160,16 +160,6 @@ export type PurchaseRow = {
   type: string;
 };
 
-/** @deprecated Prefer PurchaseRow */
-export type PurchaseSheetRow = {
-  Fecha: string;
-  Quién: string;
-  Descripción: string;
-  Categoría: string;
-  Monto: number;
-  id: string;
-};
-
 export type SavingsRow = {
   id: string;
   name: string;
@@ -218,13 +208,6 @@ export type FixedRow = {
   active: boolean;
   next_due: string;
 };
-
-/** @deprecated aliases kept for call sites mid-migration */
-export type CompraRow = PurchaseRow;
-export type AhorroRow = SavingsRow;
-export type UsuarioRow = UserRow;
-export type CategoriaRow = CategoryRow;
-export type GastoFijoRow = FixedRow;
 
 /** Accept full Sheets URL or bare spreadsheet ID. */
 export function parseSpreadsheetId(input: string): string | null {
@@ -380,14 +363,6 @@ export async function ensureHeaders(accessToken: string, spreadsheetId: string):
     method: 'POST',
     body: JSON.stringify({ valueInputOption: 'RAW', data }),
   });
-}
-
-/** @deprecated Prefer ensureWorkbookStructure */
-export async function ensurePurchaseSheet(
-  accessToken: string,
-  spreadsheetId: string
-): Promise<void> {
-  await ensureWorkbookStructure(accessToken, spreadsheetId);
 }
 
 /**

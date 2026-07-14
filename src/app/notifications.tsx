@@ -23,7 +23,7 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabAware={false}>
       <Text style={styles.title}>Notification tray</Text>
       <SectionTitle title="Reminders & alerts" subtitle="Manual bills, goals, sync notes" />
       {notifications.length === 0 ? (

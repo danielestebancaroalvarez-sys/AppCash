@@ -26,7 +26,7 @@ export type WidgetDef = {
   defaultOn: boolean;
 };
 
-/** Primary strip defaults ON; rest under More / prefs. */
+/** Dashboard widget catalog (toggles in More). */
 export const DASHBOARD_WIDGETS: WidgetDef[] = [
   {
     id: 'period_budget',
@@ -108,7 +108,7 @@ export const DASHBOARD_WIDGETS: WidgetDef[] = [
   },
 ];
 
-/** Flat home order — no "More this period" split. */
+/** Flat home widget order. */
 export const HOME_WIDGET_ORDER: DashboardWidgetId[] = [
   'market',
   'period_budget',
@@ -125,11 +125,6 @@ export const HOME_WIDGET_ORDER: DashboardWidgetId[] = [
   'converter',
 ];
 
-/** @deprecated use HOME_WIDGET_ORDER */
-export const HOME_PRIMARY_ORDER = HOME_WIDGET_ORDER;
-/** @deprecated empty — home no longer splits widgets */
-export const HOME_SECONDARY_ORDER: DashboardWidgetId[] = [];
-
 export type WidgetPrefs = Record<DashboardWidgetId, boolean>;
 
 export function defaultWidgetPrefs(): WidgetPrefs {
@@ -140,7 +135,7 @@ export function defaultWidgetPrefs(): WidgetPrefs {
   return prefs;
 }
 
-export function parseWidgetPrefs(raw: string | null): WidgetPrefs {
+function parseWidgetPrefs(raw: string | null): WidgetPrefs {
   const base = defaultWidgetPrefs();
   if (!raw) return base;
   try {
@@ -161,13 +156,6 @@ export async function loadWidgetPrefs(): Promise<WidgetPrefs> {
 
 export async function saveWidgetPrefs(prefs: WidgetPrefs): Promise<void> {
   await setSetting(WIDGET_PREF_KEY, JSON.stringify(prefs));
-}
-
-export async function setWidgetEnabled(id: DashboardWidgetId, enabled: boolean): Promise<WidgetPrefs> {
-  const prefs = await loadWidgetPrefs();
-  prefs[id] = enabled;
-  await saveWidgetPrefs(prefs);
-  return prefs;
 }
 
 /** Hide widgets that have nothing useful for the selected period. */

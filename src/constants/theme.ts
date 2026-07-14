@@ -27,7 +27,6 @@ export const Palette = {
 
 export const GlassTokens = {
   blurIntensity: 48,
-  blurIntensityChrome: 64,
   borderWidth: StyleSheet.hairlineWidth,
 } as const;
 
